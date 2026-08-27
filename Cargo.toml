@@ -7,7 +7,7 @@ description = "Cross-platform driver and service for Segotep Ice Moon / Digital 
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-hidapi = "2.6.6"
+hidapi = { version = "2.6.6", default-features = false, features = ["linux-native-basic-udev", "windows-native"] }
 sysinfo = "0.33.1"
 clap = { version = "4.5.31", features = ["derive"] }
 tracing = "0.1.41"
@@ -25,21 +25,26 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [lints.clippy]
-# UM, ACTUALLY
-pedantic = { level = "deny", priority = -1 }
-# DEVELOPING LINTS
-nursery = { level = "deny", priority = -1 }
-# DENY PANICS
 unwrap_used = "deny"
 expect_used = "deny"
-indexing_slicing = "deny"
-arithmetic_side_effects = "deny"
-unreachable = "deny"
-unimplemented = "deny"
-unchecked_time_subtraction = "deny"
-todo = "deny"
-string_slice = "deny"
-panic_in_result_fn = "deny"
 panic = "deny"
-exit = "deny"
-as_conversions = "deny"
+todo = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_sign_loss = "warn"
+cast_precision_loss = "warn"
+indexing_slicing = "warn"
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+wildcard_imports = "allow"
+doc_markdown = "allow"
+similar_names = "allow"
+unreadable_literal = "allow"

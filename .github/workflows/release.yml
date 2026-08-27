@@ -25,9 +25,9 @@ jobs:
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
+          - target: x86_64-unknown-linux-musl
             arch: amd64
-          - target: aarch64-unknown-linux-gnu
+          - target: aarch64-unknown-linux-musl
             arch: arm64
 
     steps:
@@ -39,13 +39,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install system dependencies (Host)
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq pkg-config libusb-1.0-0-dev libudev-dev
-
-      - name: Install cross (if aarch64)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross
         uses: taiki-e/install-action@v2
         with:
           tool: cross
@@ -54,11 +48,7 @@ jobs:
         env:
           CARGO_PKG_VERSION: ${{ inputs.release_version }}
         run: |
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
+          cross build --release --target ${{ matrix.target }}
 
       - name: Package Release Bundle
         run: |
