@@ -4,9 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
-use segotep_digital::{
-    DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID,
-};
+use segotep_digital::{PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -56,25 +54,23 @@ fn initialize_device_connection(
     dev: &mut SegotepDevice,
     override_id: Option<u8>,
     fahrenheit: bool,
-) -> u8 {
-    let mut resolved_id = override_id.unwrap_or(DEFAULT_MODEL_ID_ICE_MOON);
+) -> Option<u8> {
+    let mut resolved_id = override_id;
 
     match dev.read_info(500) {
         Ok(Some(info)) => {
             if let Some(id) = override_id {
-                resolved_id = id;
+                resolved_id = Some(id);
                 info!(
                     "Device connected -> Auto-detected Model ID: {}, using manual override: {id}",
                     info.model_id
                 );
             } else if info.model_id > 0 {
-                resolved_id = info.model_id;
+                resolved_id = Some(info.model_id);
                 info!(
                     "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {})",
                     info.model_id, info.capability_mask, info.is_fahrenheit_capable
                 );
-            } else {
-                info!("Device connected -> Fallback Model ID: {resolved_id}");
             }
 
             if fahrenheit && !info.is_fahrenheit_capable {
@@ -84,9 +80,15 @@ fn initialize_device_connection(
             }
         }
         Ok(None) => {
-            info!(
-                "Device connected -> No input report received within timeout, using Model ID: {resolved_id}"
-            );
+            if let Some(id) = resolved_id {
+                info!(
+                    "Device connected -> No input report received within timeout, using configured Model ID: {id}"
+                );
+            } else {
+                warn!(
+                    "Device connected -> No input report received and no Model ID specified; using default 0"
+                );
+            }
         }
         Err(e) => {
             debug!("Device report query notice: {e}");
@@ -143,7 +145,7 @@ fn main() {
     let mut telemetry = SystemTelemetry::new();
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
     let mut initial_connection = true;
-    let mut active_model_id = args.model_id.unwrap_or(DEFAULT_MODEL_ID_ICE_MOON);
+    let mut active_model_id = args.model_id.unwrap_or(0);
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
@@ -156,8 +158,10 @@ fn main() {
         }
 
         if initial_connection {
-            active_model_id =
-                initialize_device_connection(&mut dev, args.model_id, args.fahrenheit);
+            if let Some(id) = initialize_device_connection(&mut dev, args.model_id, args.fahrenheit)
+            {
+                active_model_id = id;
+            }
             initial_connection = false;
         }
 

@@ -3,8 +3,6 @@
 pub const VENDOR_ID: u16 = 0x1A86;
 pub const PRODUCT_ID: u16 = 0xA001;
 
-pub const DEFAULT_MODEL_ID_ICE_MOON: u8 = 3;
-
 /// Magic header bytes sent at byte index 1 and 2.
 pub const MAGIC_HEADER: [u8; 2] = [0xDC, 0xDD];
 
@@ -15,7 +13,7 @@ pub const FLASH_VALUE1_OFF: u8 = 0x0F;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SegotepPacket {
-    /// Device model ID (e.g. 3 for Ice Moon)
+    /// Device model ID (auto-detected from hardware report)
     pub model_id: u8,
     /// Screen power state
     pub screen_on: bool,
@@ -42,7 +40,7 @@ pub struct SegotepPacket {
 impl Default for SegotepPacket {
     fn default() -> Self {
         Self {
-            model_id: DEFAULT_MODEL_ID_ICE_MOON,
+            model_id: 0,
             screen_on: true,
             cpu_temp: 0,
             cpu_load: 0,
@@ -58,64 +56,63 @@ impl Default for SegotepPacket {
 }
 
 impl SegotepPacket {
-    /// Serializes the telemetry data into the exact 34-byte USB HID report.
+    /// Serializes the telemetry metrics into the 34-byte USB HID report.
+    ///
+    /// # Packet Layout:
+    /// - Bytes 0..3: `[0x00, 0xDC, 0xDD, screen_state]`
+    /// - Byte 4: `flash_value1` (`model_id` when screen ON, `0x0F` when screen OFF)
+    /// - Bytes 5..20: Reserved zeros / padding (`[0; 16]`)
+    /// - Bytes 21..22: CPU Temp (u8), CPU Load (u8)
+    /// - Bytes 23..24: CPU Power Watts (u16 LE)
+    /// - Bytes 25..26: CPU Clock MHz (u16 LE)
+    /// - Bytes 27..28: GPU Temp (u8), GPU Load (u8)
+    /// - Bytes 29..30: GPU Power Watts (u16 LE)
+    /// - Bytes 31..32: GPU Clock MHz (u16 LE)
+    /// - Byte 33: `is_fahrenheit` (1 if °F, 0 if °C)
     #[must_use]
     #[allow(clippy::indexing_slicing, clippy::bool_to_int_with_if)]
     pub const fn serialize(&self) -> [u8; 34] {
-        let mut buf = [0u8; 34];
+        let mut packet = [0u8; 34];
 
-        // buf[0] = HID Report ID 0x00
-        buf[0] = 0x00;
+        // Magic Header
+        packet[1] = MAGIC_HEADER[0];
+        packet[2] = MAGIC_HEADER[1];
 
-        // Magic header 220, 221 (0xDC, 0xDD)
-        buf[1] = MAGIC_HEADER[0];
-        buf[2] = MAGIC_HEADER[1];
-
-        // Screen state and flash profile
+        // Screen Power Control & Flash Value 1 (Model ID)
         if self.screen_on {
-            buf[3] = SCREEN_STATE_ON;
-            buf[4] = self.model_id;
+            packet[3] = SCREEN_STATE_ON;
+            packet[4] = self.model_id;
         } else {
-            buf[3] = SCREEN_STATE_OFF;
-            buf[4] = FLASH_VALUE1_OFF;
+            packet[3] = SCREEN_STATE_OFF;
+            packet[4] = FLASH_VALUE1_OFF;
         }
 
-        // Fixed protocol indicators
-        buf[13] = 0x01;
-        buf[17] = 0x0C; // Data payload length: 12 bytes
+        // Telemetry Data
+        packet[21] = self.cpu_temp;
+        packet[22] = self.cpu_load;
 
-        // CPU Telemetry
-        buf[21] = self.cpu_temp;
-        buf[22] = self.cpu_load;
+        let cpu_pwr = self.cpu_power_watts.to_le_bytes();
+        packet[23] = cpu_pwr[0];
+        packet[24] = cpu_pwr[1];
 
-        // CPU Power (u16 Little Endian)
-        let cpu_pwr_bytes = self.cpu_power_watts.to_le_bytes();
-        buf[23] = cpu_pwr_bytes[0];
-        buf[24] = cpu_pwr_bytes[1];
+        let cpu_clk = self.cpu_clock_mhz.to_le_bytes();
+        packet[25] = cpu_clk[0];
+        packet[26] = cpu_clk[1];
 
-        // CPU Clock (u16 Little Endian)
-        let cpu_clk_bytes = self.cpu_clock_mhz.to_le_bytes();
-        buf[25] = cpu_clk_bytes[0];
-        buf[26] = cpu_clk_bytes[1];
+        packet[27] = self.gpu_temp;
+        packet[28] = self.gpu_load;
 
-        // GPU Telemetry
-        buf[27] = self.gpu_temp;
-        buf[28] = self.gpu_load;
+        let gpu_pwr = self.gpu_power_watts.to_le_bytes();
+        packet[29] = gpu_pwr[0];
+        packet[30] = gpu_pwr[1];
 
-        // GPU Power (u16 Little Endian)
-        let gpu_pwr_bytes = self.gpu_power_watts.to_le_bytes();
-        buf[29] = gpu_pwr_bytes[0];
-        buf[30] = gpu_pwr_bytes[1];
+        let gpu_clk = self.gpu_clock_mhz.to_le_bytes();
+        packet[31] = gpu_clk[0];
+        packet[32] = gpu_clk[1];
 
-        // GPU Clock (u16 Little Endian)
-        let gpu_clk_bytes = self.gpu_clock_mhz.to_le_bytes();
-        buf[31] = gpu_clk_bytes[0];
-        buf[32] = gpu_clk_bytes[1];
+        packet[33] = if self.is_fahrenheit { 1 } else { 0 };
 
-        // Fahrenheit flag
-        buf[33] = if self.is_fahrenheit { 1 } else { 0 };
-
-        buf
+        packet
     }
 }
 
@@ -132,11 +129,9 @@ mod tests {
         assert_eq!(bytes[0], 0x00);
         assert_eq!(bytes[1], 0xDC);
         assert_eq!(bytes[2], 0xDD);
-        assert_eq!(bytes[3], 0x00);
-        assert_eq!(bytes[4], 0x03);
-        assert_eq!(bytes[13], 0x01);
-        assert_eq!(bytes[17], 0x0C);
-        assert_eq!(bytes[33], 0x00);
+        assert_eq!(bytes[3], 0x00); // Screen ON
+        assert_eq!(bytes[4], 0); // Default model_id
+        assert_eq!(bytes[33], 0); // Celsius
     }
 
     #[test]
@@ -144,38 +139,41 @@ mod tests {
         let packet = SegotepPacket {
             model_id: 3,
             screen_on: true,
-            cpu_temp: 65,
-            cpu_load: 45,
+            cpu_temp: 55,
+            cpu_load: 80,
             cpu_power_watts: 125,
             cpu_clock_mhz: 4800,
-            gpu_temp: 55,
-            gpu_load: 80,
+            gpu_temp: 65,
+            gpu_load: 99,
             gpu_power_watts: 250,
-            gpu_clock_mhz: 2200,
+            gpu_clock_mhz: 2100,
             is_fahrenheit: true,
         };
 
         let bytes = packet.serialize();
 
-        assert_eq!(bytes[21], 65);
-        assert_eq!(bytes[22], 45);
+        assert_eq!(bytes[4], 3);
+        assert_eq!(bytes[21], 55);
+        assert_eq!(bytes[22], 80);
         assert_eq!(u16::from_le_bytes([bytes[23], bytes[24]]), 125);
         assert_eq!(u16::from_le_bytes([bytes[25], bytes[26]]), 4800);
-        assert_eq!(bytes[27], 55);
-        assert_eq!(bytes[28], 80);
+        assert_eq!(bytes[27], 65);
+        assert_eq!(bytes[28], 99);
         assert_eq!(u16::from_le_bytes([bytes[29], bytes[30]]), 250);
-        assert_eq!(u16::from_le_bytes([bytes[31], bytes[32]]), 2200);
+        assert_eq!(u16::from_le_bytes([bytes[31], bytes[32]]), 2100);
         assert_eq!(bytes[33], 1);
     }
 
     #[test]
     fn test_screen_off_encoding() {
         let packet = SegotepPacket {
+            model_id: 3,
             screen_on: false,
             ..Default::default()
         };
 
         let bytes = packet.serialize();
+
         assert_eq!(bytes[3], 0x0E);
         assert_eq!(bytes[4], 0x0F);
     }
