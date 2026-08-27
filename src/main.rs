@@ -4,7 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use segotep_digital::{
     DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID,
 };
@@ -12,8 +12,8 @@ use segotep_digital::{
 #[derive(Parser, Debug)]
 #[command(
     name = "segotep-digital",
-    author = "Delnegend <kiennguyen19323@gmail.com>",
-    version = "0.1.0",
+    author,
+    version,
     about = "Linux driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
 )]
 struct Args {
@@ -21,9 +21,9 @@ struct Args {
     #[arg(short, long, default_value_t = 1000)]
     interval_ms: u64,
 
-    /// Device model ID (default: 3 for Ice Moon)
-    #[arg(short, long, default_value_t = DEFAULT_MODEL_ID_ICE_MOON)]
-    model_id: u8,
+    /// Override device model ID (auto-detected from hardware by default)
+    #[arg(short, long)]
+    model_id: Option<u8>,
 
     /// Display temperature in Fahrenheit instead of Celsius
     #[arg(short = 'f', long)]
@@ -51,6 +51,50 @@ fn parse_hex_id(id_str: &str, default: u16) -> u16 {
     u16::from_str_radix(clean, 16).unwrap_or(default)
 }
 
+fn initialize_device_connection(
+    dev: &mut SegotepDevice,
+    override_id: Option<u8>,
+    fahrenheit: bool,
+) -> u8 {
+    let mut resolved_id = override_id.unwrap_or(DEFAULT_MODEL_ID_ICE_MOON);
+
+    match dev.read_info(500) {
+        Ok(Some(info)) => {
+            if let Some(id) = override_id {
+                resolved_id = id;
+                info!(
+                    "Device connected -> Auto-detected Model ID: {}, using manual override: {id}",
+                    info.model_id
+                );
+            } else if info.model_id > 0 {
+                resolved_id = info.model_id;
+                info!(
+                    "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {})",
+                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
+                );
+            } else {
+                info!("Device connected -> Fallback Model ID: {resolved_id}");
+            }
+
+            if fahrenheit && !info.is_fahrenheit_capable {
+                warn!(
+                    "Hardware report indicates Fahrenheit may not be supported on this display revision."
+                );
+            }
+        }
+        Ok(None) => {
+            info!(
+                "Device connected -> No input report received within timeout, using Model ID: {resolved_id}"
+            );
+        }
+        Err(e) => {
+            debug!("Device report query notice: {e}");
+        }
+    }
+
+    resolved_id
+}
+
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
@@ -66,10 +110,7 @@ fn main() {
         .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
     info!("Starting Segotep Digital Linux Driver");
-    info!(
-        "Target Device: VID=0x{:04x}, PID=0x{:04x}, Model={}",
-        vid, pid, args.model_id
-    );
+    info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
     info!(
         "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
         args.interval_ms, args.fahrenheit, args.screen_off
@@ -97,6 +138,7 @@ fn main() {
     let mut telemetry = SystemTelemetry::new();
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
     let mut initial_connection = true;
+    let mut active_model_id = args.model_id.unwrap_or(DEFAULT_MODEL_ID_ICE_MOON);
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
@@ -108,14 +150,9 @@ fn main() {
             continue;
         }
 
-        // Query and log device capabilities once upon connection
         if initial_connection {
-            if let Ok(Some(info)) = dev.read_info(100) {
-                info!(
-                    "Device initialized -> Model ID: {}, Capability Mask: 0x{:02x}, Fahrenheit Capable: {}",
-                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
-                );
-            }
+            active_model_id =
+                initialize_device_connection(&mut dev, args.model_id, args.fahrenheit);
             initial_connection = false;
         }
 
@@ -129,7 +166,7 @@ fn main() {
         }
 
         let packet = SegotepPacket {
-            model_id: args.model_id,
+            model_id: active_model_id,
             screen_on: !args.screen_off,
             cpu_temp: metrics.cpu_temp,
             cpu_load: metrics.cpu_load,
