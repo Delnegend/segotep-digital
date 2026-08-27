@@ -1,6 +1,8 @@
 //! Windows shared memory sensor provider (Segotep LDGT, `HWiNFO`, `AIDA64`, `LibreHardwareMonitor`).
 
 #[cfg(target_os = "windows")]
+use clap::ValueEnum;
+#[cfg(target_os = "windows")]
 use std::ffi::{CStr, c_void};
 #[cfg(target_os = "windows")]
 use std::path::Path;
@@ -22,6 +24,22 @@ use windows_sys::Win32::System::Threading::{
     OpenMutexW, ReleaseMutex, SYNCHRONIZATION_SYNCHRONIZE, WaitForSingleObject,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(target_os = "windows", derive(ValueEnum))]
+pub enum WindowsSensorSource {
+    /// Auto-detect and try all available sources (LDGT -> `HWiNFO64` -> AIDA64 -> sysinfo)
+    #[default]
+    Auto,
+    /// Force Segotep LDGT official engine (`shareMemory_LDGTInfo`)
+    Ldgt,
+    /// Force official standalone `HWiNFO64` shared memory (`Global\HWiNFO_SENS_SM2`)
+    Hwinfo,
+    /// Force `AIDA64` / `LibreHardwareMonitor` XML shared memory (`AIDA64_SensorValues`)
+    Aida64,
+    /// Force native user-space `sysinfo` only (no shared memory or drivers)
+    Sysinfo,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct WindowsSensorValues {
     pub cpu_temp: Option<u8>,
@@ -34,6 +52,7 @@ pub struct WindowsSensorValues {
 
 #[cfg(target_os = "windows")]
 pub struct WindowsSharedMemoryReader {
+    source: WindowsSensorSource,
     ldgt_handle: HANDLE,
     ldgt_ptr: *const u8,
     hwinfo_handle: HANDLE,
@@ -49,15 +68,16 @@ pub struct WindowsSharedMemoryReader {
 #[cfg(target_os = "windows")]
 impl Default for WindowsSharedMemoryReader {
     fn default() -> Self {
-        Self::new()
+        Self::new(WindowsSensorSource::Auto)
     }
 }
 
 #[cfg(target_os = "windows")]
 impl WindowsSharedMemoryReader {
     #[must_use]
-    pub const fn new() -> Self {
+    pub const fn new(source: WindowsSensorSource) -> Self {
         Self {
+            source,
             ldgt_handle: std::ptr::null_mut(),
             ldgt_ptr: std::ptr::null(),
             hwinfo_handle: std::ptr::null_mut(),
@@ -71,9 +91,21 @@ impl WindowsSharedMemoryReader {
         }
     }
 
-    /// Creates or opens `shareMemory_LDGTInfo`, official `Global\HWiNFO_SENS_SM2`, and `AIDA64_SensorValues`.
+    /// Sets the preferred sensor source dynamically.
+    pub fn set_source(&mut self, source: WindowsSensorSource) {
+        if self.source != source {
+            self.close();
+            self.source = source;
+        }
+    }
+
+    /// Creates or opens requested shared memory banks based on the selected `WindowsSensorSource`.
     #[allow(clippy::as_conversions, clippy::if_not_else)]
     pub fn try_open(&mut self) -> bool {
+        if self.source == WindowsSensorSource::Sysinfo {
+            return false;
+        }
+
         if self.is_open
             && (!self.ldgt_ptr.is_null() || !self.hwinfo_ptr.is_null() || !self.aida_ptr.is_null())
         {
@@ -82,72 +114,89 @@ impl WindowsSharedMemoryReader {
 
         self.close();
 
-        // 1. Primary: Segotep LDGT shared memory (2MB double-buffer)
-        let ldgt_name = b"shareMemory_LDGTInfo\0";
-        let ldgt_handle = unsafe {
-            CreateFileMappingA(
-                INVALID_HANDLE_VALUE,
-                null(),
-                PAGE_READWRITE,
-                0,
-                2_097_152,
-                ldgt_name.as_ptr(),
-            )
-        };
+        // 1. Segotep LDGT shared memory (2MB double-buffer)
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Ldgt)
+            && self.ldgt_handle.is_null()
+        {
+            let ldgt_name = b"shareMemory_LDGTInfo\0";
+            let ldgt_handle = unsafe {
+                CreateFileMappingA(
+                    INVALID_HANDLE_VALUE,
+                    null(),
+                    PAGE_READWRITE,
+                    0,
+                    2_097_152,
+                    ldgt_name.as_ptr(),
+                )
+            };
 
-        if !ldgt_handle.is_null() {
-            let map_ptr =
-                unsafe { MapViewOfFile(ldgt_handle, FILE_MAP_ALL_ACCESS, 0, 0, 2_097_152) };
-            if map_ptr.Value.is_null() {
-                unsafe { CloseHandle(ldgt_handle) };
-            } else {
-                self.ldgt_handle = ldgt_handle;
-                self.ldgt_ptr = map_ptr.Value.cast::<u8>();
-                self.is_open = true;
-                info!("Initialized 2MB Windows LDGT shared memory sensor bank");
+            if !ldgt_handle.is_null() {
+                let map_ptr =
+                    unsafe { MapViewOfFile(ldgt_handle, FILE_MAP_ALL_ACCESS, 0, 0, 2_097_152) };
+                if map_ptr.Value.is_null() {
+                    unsafe { CloseHandle(ldgt_handle) };
+                } else {
+                    self.ldgt_handle = ldgt_handle;
+                    self.ldgt_ptr = map_ptr.Value.cast::<u8>();
+                    self.is_open = true;
+                    info!("Initialized 2MB Windows LDGT shared memory sensor bank");
+                }
             }
         }
 
         // 2. Official HWiNFO64 Standalone Shared Memory: Global\HWiNFO_SENS_SM2
-        let hwinfo_shm_name = b"Global\\HWiNFO_SENS_SM2\0";
-        let hwinfo_handle = unsafe { OpenFileMappingA(FILE_MAP_READ, 0, hwinfo_shm_name.as_ptr()) };
-        if !hwinfo_handle.is_null() {
-            let map_ptr = unsafe { MapViewOfFile(hwinfo_handle, FILE_MAP_READ, 0, 0, 0) };
-            if map_ptr.Value.is_null() {
-                unsafe { CloseHandle(hwinfo_handle) };
-            } else {
-                self.hwinfo_handle = hwinfo_handle;
-                self.hwinfo_ptr = map_ptr.Value.cast::<u8>();
-                let mutex_name_w: [u16; 24] = [
-                    0x0047, 0x006C, 0x006F, 0x0062, 0x0061, 0x006C, 0x005C, 0x0048, 0x0057, 0x0069,
-                    0x004E, 0x0046, 0x004F, 0x005F, 0x0053, 0x004D, 0x0032, 0x005F, 0x004D, 0x0055,
-                    0x0054, 0x0045, 0x0058, 0x0000,
-                ]; // "Global\HWiNFO_SM2_MUTEX\0"
-                self.hwinfo_mutex =
-                    unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, mutex_name_w.as_ptr()) };
-                self.is_open = true;
-                info!(
-                    "Successfully connected to official standalone HWiNFO64 shared memory stream (Global\\HWiNFO_SENS_SM2)"
-                );
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Hwinfo)
+            && self.hwinfo_handle.is_null()
+        {
+            let hwinfo_shm_name = b"Global\\HWiNFO_SENS_SM2\0";
+            let hwinfo_handle =
+                unsafe { OpenFileMappingA(FILE_MAP_READ, 0, hwinfo_shm_name.as_ptr()) };
+            if !hwinfo_handle.is_null() {
+                let map_ptr = unsafe { MapViewOfFile(hwinfo_handle, FILE_MAP_READ, 0, 0, 0) };
+                if map_ptr.Value.is_null() {
+                    unsafe { CloseHandle(hwinfo_handle) };
+                } else {
+                    self.hwinfo_handle = hwinfo_handle;
+                    self.hwinfo_ptr = map_ptr.Value.cast::<u8>();
+                    let mutex_name_w: [u16; 24] = [
+                        0x0047, 0x006C, 0x006F, 0x0062, 0x0061, 0x006C, 0x005C, 0x0048, 0x0057,
+                        0x0069, 0x004E, 0x0046, 0x004F, 0x005F, 0x0053, 0x004D, 0x0032, 0x005F,
+                        0x004D, 0x0055, 0x0054, 0x0045, 0x0058, 0x0000,
+                    ]; // "Global\HWiNFO_SM2_MUTEX\0"
+                    self.hwinfo_mutex = unsafe {
+                        OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, mutex_name_w.as_ptr())
+                    };
+                    self.is_open = true;
+                    info!(
+                        "Successfully connected to official standalone HWiNFO64 shared memory stream (Global\\HWiNFO_SENS_SM2)"
+                    );
+                }
             }
         }
 
         // 3. AIDA64 / LibreHardwareMonitor XML memory bank
-        let aida_name = b"AIDA64_SensorValues\0";
-        let aida_handle = unsafe { OpenFileMappingA(FILE_MAP_READ, 0, aida_name.as_ptr()) };
-        if !aida_handle.is_null() {
-            let aida_map = unsafe { MapViewOfFile(aida_handle, FILE_MAP_READ, 0, 0, 262_144) };
-            if aida_map.Value.is_null() {
-                unsafe { CloseHandle(aida_handle) };
-            } else {
-                self.aida_handle = aida_handle;
-                self.aida_ptr = aida_map.Value.cast::<u8>();
-                self.is_open = true;
-                info!("Attached to AIDA64 sensor stream");
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Aida64)
+            && self.aida_handle.is_null()
+        {
+            let aida_name = b"AIDA64_SensorValues\0";
+            let aida_handle = unsafe { OpenFileMappingA(FILE_MAP_READ, 0, aida_name.as_ptr()) };
+            if !aida_handle.is_null() {
+                let aida_map = unsafe { MapViewOfFile(aida_handle, FILE_MAP_READ, 0, 0, 262_144) };
+                if aida_map.Value.is_null() {
+                    unsafe { CloseHandle(aida_handle) };
+                } else {
+                    self.aida_handle = aida_handle;
+                    self.aida_ptr = aida_map.Value.cast::<u8>();
+                    self.is_open = true;
+                    info!("Attached to AIDA64 sensor stream");
+                }
             }
         }
 
-        if !self.tried_autostart {
+        if !self.tried_autostart
+            && (self.source == WindowsSensorSource::Auto
+                || self.source == WindowsSensorSource::Ldgt)
+        {
             self.tried_autostart = true;
             try_spawn_background_helper();
         }
@@ -155,7 +204,7 @@ impl WindowsSharedMemoryReader {
         self.is_open
     }
 
-    /// Reads real-time hardware telemetry across all active shared memory sources.
+    /// Reads real-time hardware telemetry across active shared memory sources.
     #[allow(
         clippy::indexing_slicing,
         clippy::cast_possible_truncation,
@@ -169,16 +218,24 @@ impl WindowsSharedMemoryReader {
         }
 
         self.sample_count = self.sample_count.saturating_add(1);
-        let mut values = if self.ldgt_ptr.is_null() {
-            WindowsSensorValues::default()
-        } else {
+        let mut values = WindowsSensorValues::default();
+
+        // 1. Try LDGT JSON if enabled
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Ldgt)
+            && !self.ldgt_ptr.is_null()
+        {
             let slice = unsafe { std::slice::from_raw_parts(self.ldgt_ptr, 2_097_152) };
             let text = String::from_utf8_lossy(slice);
-            parse_ldgt_json_telemetry(&text)
-        };
+            values = parse_ldgt_json_telemetry(&text);
+        }
 
-        // 2. Try standalone HWiNFO64 v2 binary memory bank if values are missing
-        if (values.cpu_temp.is_none() || values.cpu_power.is_none()) && !self.hwinfo_ptr.is_null() {
+        // 2. Try standalone HWiNFO64 v2 binary memory bank if enabled
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Hwinfo)
+            && (values.cpu_temp.is_none()
+                || values.cpu_power.is_none()
+                || self.source == WindowsSensorSource::Hwinfo)
+            && !self.hwinfo_ptr.is_null()
+        {
             let hw_vals = self.sample_hwinfo64_binary();
             if values.cpu_temp.is_none() {
                 values.cpu_temp = hw_vals.cpu_temp;
@@ -200,8 +257,13 @@ impl WindowsSharedMemoryReader {
             }
         }
 
-        // 3. Try AIDA64 XML memory bank if still missing
-        if (values.cpu_temp.is_none() || values.cpu_power.is_none()) && !self.aida_ptr.is_null() {
+        // 3. Try AIDA64 XML memory bank if enabled
+        if (self.source == WindowsSensorSource::Auto || self.source == WindowsSensorSource::Aida64)
+            && (values.cpu_temp.is_none()
+                || values.cpu_power.is_none()
+                || self.source == WindowsSensorSource::Aida64)
+            && !self.aida_ptr.is_null()
+        {
             let slice = unsafe { std::slice::from_raw_parts(self.aida_ptr, 262_144) };
             let text = String::from_utf8_lossy(slice);
             let aida_vals = parse_aida64_xml_telemetry(&text);

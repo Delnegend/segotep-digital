@@ -4,6 +4,8 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
+#[cfg(target_os = "windows")]
+use segotep_digital::WindowsSensorSource;
 use segotep_digital::protocol::DEFAULT_FALLBACK_MODEL_ID;
 use segotep_digital::{PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID};
 use tracing::{debug, error, info, warn};
@@ -41,6 +43,11 @@ struct Args {
     #[arg(long)]
     pid: Option<String>,
 
+    /// Specific sensor backend to use on Windows (auto, ldgt, hwinfo, aida64, sysinfo)
+    #[cfg(target_os = "windows")]
+    #[arg(short = 's', long, default_value = "auto")]
+    source: WindowsSensorSource,
+
     /// Print telemetry metrics to stdout on each tick
     #[arg(short, long)]
     verbose: bool,
@@ -63,8 +70,8 @@ fn initialize_device_connection(
             if let Some(id) = override_id {
                 resolved_id = id;
                 info!(
-                    "Device connected -> Auto-detected Model ID: {}, using manual override: {id}",
-                    info.model_id
+                    "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {}), using manual override: {id}",
+                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
                 );
             } else if info.model_id > 0 {
                 resolved_id = info.model_id;
@@ -91,14 +98,21 @@ fn initialize_device_connection(
     resolved_id
 }
 
+#[allow(clippy::cognitive_complexity)]
 fn main() {
+    let args = Args::parse();
+
+    let default_level = if args.verbose { "debug" } else { "info" };
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_level));
+
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-        )
+        .with_env_filter(env_filter)
+        .with_target(true)
+        .compact()
         .init();
 
-    let args = Args::parse();
+    info!("Starting Segotep Digital Driver");
 
     let vid = args
         .vid
@@ -109,8 +123,9 @@ fn main() {
         .as_deref()
         .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
-    info!("Starting Segotep Digital Driver");
     info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
+    #[cfg(target_os = "windows")]
+    info!("Windows Sensor Source: {:?}", args.source);
     info!(
         "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
         args.interval_ms, args.fahrenheit, args.screen_off
@@ -136,6 +151,9 @@ fn main() {
     };
 
     let mut telemetry = SystemTelemetry::new();
+    #[cfg(target_os = "windows")]
+    telemetry.set_windows_sensor_source(args.source);
+
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
     let mut initial_connection = true;
     let mut active_model_id = args.model_id.unwrap_or(DEFAULT_FALLBACK_MODEL_ID);
@@ -186,6 +204,11 @@ fn main() {
         if let Err(e) = dev.send(&packet) {
             error!("Failed to send data: {e}. Will reconnect.");
             initial_connection = true;
+        }
+
+        if args.screen_off {
+            info!("Screen-OFF packet sent successfully. Exiting.");
+            break;
         }
 
         sleep(tick_interval);

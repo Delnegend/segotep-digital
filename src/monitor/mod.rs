@@ -12,6 +12,8 @@ use cpu_load::CpuLoadMonitor;
 use cpu_power::CpuPowerMonitor;
 use cpu_temp::CpuTempMonitor;
 #[cfg(target_os = "windows")]
+pub use windows_sensors::WindowsSensorSource;
+#[cfg(target_os = "windows")]
 use windows_sensors::WindowsSharedMemoryReader;
 
 pub struct SystemTelemetry {
@@ -50,8 +52,13 @@ impl SystemTelemetry {
             power: CpuPowerMonitor::new(),
             freq: CpuFreqMonitor::new(),
             #[cfg(target_os = "windows")]
-            win_sensors: WindowsSharedMemoryReader::new(),
+            win_sensors: WindowsSharedMemoryReader::new(WindowsSensorSource::Auto),
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn set_windows_sensor_source(&mut self, source: WindowsSensorSource) {
+        self.win_sensors.set_source(source);
     }
 
     /// Samples all telemetry values from hardware or shared memory.
@@ -59,51 +66,37 @@ impl SystemTelemetry {
         #[cfg(target_os = "windows")]
         let win_vals = self.win_sensors.sample();
 
-        let mut cpu_temp = self.temp.get_temp();
-        let cpu_load = self.load.get_load_pct();
-        let mut cpu_power_watts = self.power.get_power_watts();
-        let mut cpu_clock_mhz = self.freq.get_freq_mhz();
-
-        #[allow(unused_mut)]
-        let mut gpu_temp = 0;
-        #[allow(unused_mut)]
-        let mut gpu_load = 0;
-        #[allow(unused_mut)]
-        let mut gpu_power_watts = 0;
-        #[allow(unused_mut)]
-        let mut gpu_clock_mhz = 0;
+        let base_temp = self.temp.get_temp();
+        let base_load = self.load.get_load_pct();
+        let base_power = self.power.get_power_watts();
+        let base_freq = self.freq.get_freq_mhz();
 
         #[cfg(target_os = "windows")]
         {
-            if let Some(t) = win_vals.cpu_temp {
-                cpu_temp = t;
-            }
-            if let Some(p) = win_vals.cpu_power {
-                cpu_power_watts = p;
-            }
-            if let Some(c) = win_vals.cpu_clock {
-                cpu_clock_mhz = c;
-            }
-            if let Some(gt) = win_vals.gpu_temp {
-                gpu_temp = gt;
-            }
-            if let Some(gp) = win_vals.gpu_power {
-                gpu_power_watts = gp;
-            }
-            if let Some(gc) = win_vals.gpu_clock {
-                gpu_clock_mhz = gc;
+            HardwareMetrics {
+                cpu_temp: win_vals.cpu_temp.unwrap_or(base_temp),
+                cpu_load: base_load,
+                cpu_power_watts: win_vals.cpu_power.unwrap_or(base_power),
+                cpu_clock_mhz: win_vals.cpu_clock.unwrap_or(base_freq),
+                gpu_temp: win_vals.gpu_temp.unwrap_or(0),
+                gpu_load: 0,
+                gpu_power_watts: win_vals.gpu_power.unwrap_or(0),
+                gpu_clock_mhz: win_vals.gpu_clock.unwrap_or(0),
             }
         }
 
-        HardwareMetrics {
-            cpu_temp,
-            cpu_load,
-            cpu_power_watts,
-            cpu_clock_mhz,
-            gpu_temp,
-            gpu_load,
-            gpu_power_watts,
-            gpu_clock_mhz,
+        #[cfg(not(target_os = "windows"))]
+        {
+            HardwareMetrics {
+                cpu_temp: base_temp,
+                cpu_load: base_load,
+                cpu_power_watts: base_power,
+                cpu_clock_mhz: base_freq,
+                gpu_temp: 0,
+                gpu_load: 0,
+                gpu_power_watts: 0,
+                gpu_clock_mhz: 0,
+            }
         }
     }
 }
