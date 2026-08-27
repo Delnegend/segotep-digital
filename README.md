@@ -9,15 +9,36 @@ Cross-platform driver and background service for Segotep Ice Moon / Digital seri
 
 ## Features
 
-- **Zero-Config Auto Detection**: Automatically queries the cooler MCU on startup to detect the Model ID, telemetry capability bitmask, and Fahrenheit display support.
-- **Hardware Telemetry Support**:
-  - **CPU Temperature**: Direct high-speed sysfs (`/sys/class/hwmon`) reader on Linux and native sensor sampling via `sysinfo` on Windows.
-  - **CPU Package Power**: Real-time energy delta calculations via Intel/AMD RAPL (`/sys/class/powercap` and `hwmon` energy counters).
-  - **CPU Utilization**: Accurate `/proc/stat` delta monitoring on Linux and high-precision `GetSystemTimes` Win32 API on Windows.
-  - **CPU Frequency**: Linux `cpufreq` scaling clock reader and Windows clock speed monitoring.
-- **Robust USB HID Reconnection**: Automatically detects cooler disconnections/sleep cycles and seamlessly reconnects.
-- **Lightweight Background Daemon**: Runs in the background consuming negligible CPU and RAM (< 10MB).
+- **Cross-Platform Telemetry**:
+  - **Linux**: Direct zero-overhead hardware monitoring via `sysfs` (`/sys/class/hwmon`), Intel/AMD RAPL energy counters (`/sys/class/powercap`), `/proc/stat`, and `cpufreq`.
+  - **Windows**: Multi-tier telemetry engine supporting Segotep LDGT helper, official standalone HWiNFO64 shared memory (`Global\HWiNFO_SENS_SM2`), AIDA64 / LibreHardwareMonitor XML shared memory (`AIDA64_SensorValues`), and native fallback via Win32 / `sysinfo`.
+- **Reverse-Engineered 34-Byte HID Protocol**: Sends exact packet structures matching official Chinese vendor hardware revisions (Model 1 Standard, Model 3 Ice Moon 360).
+- **Robust USB HID Reconnection**: Automatically detects cooler disconnections/sleep cycles and seamlessly reconnects without crashing.
+- **Lightweight Background Daemon**: Zero bloat, consuming negligible CPU and < 10MB of RAM.
 - **Customizable**: Configurable refresh intervals, Fahrenheit display mode, screen power toggle, and custom VID/PID.
+
+---
+
+## Windows Requirements & Sensor Sources
+
+On Windows, reading ring-0 hardware sensors (like CPU core temperatures and package power in Watts) requires one of the following sensor providers:
+
+### Option 1: HWiNFO64 (Recommended)
+1. Install and launch [HWiNFO64](https://www.hwinfo.com/).
+2. Open **Settings** -> **General / User Interface**.
+3. Enable **"Shared Memory Support"**.
+4. `segotep-digital` will automatically attach to `Global\HWiNFO_SENS_SM2` with mutex synchronization to fetch real-time CPU `Tctl/Tdie` temperature, package power, and clock speeds.
+
+### Option 2: Segotep Official Sensor Engine (`LDGT.exe`)
+- If the official Segotep Digital software is installed in `C:\Program Files\Segotep DigitalCAP`, `segotep-digital` will automatically start and communicate with the 2MB `shareMemory_LDGTInfo` sensor bank.
+
+### Option 3: AIDA64 / LibreHardwareMonitor
+- In AIDA64: **File** -> **Preferences** -> **Hardware Monitoring** -> **External Applications** -> Enable **"Enable shared memory"**.
+- In LibreHardwareMonitor: Enable the AIDA64 shared memory plugin.
+
+### Option 4: Pure Native User-Space (Driverless)
+- If none of the above are running, `segotep-digital` falls back to user-space Win32 APIs and `sysinfo`.
+- *Note:* User-space Windows APIs cannot query raw thermal diode temperatures without an installed kernel driver.
 
 ---
 
@@ -56,7 +77,12 @@ Cross-platform driver and background service for Segotep Ice Moon / Digital seri
 
 1. Download the latest zip archive from [Releases](https://github.com/Delnegend/segotep-digital/releases):
    - `segotep-digital-v0.1.0-windows-x64.zip`
-2. Extract the archive and run `segotep-digital.exe` directly or add a shortcut to Windows Startup (`shell:startup`) / Task Scheduler.
+2. Extract the archive.
+3. Run `segotep-digital.exe` with administrator privileges:
+   ```powershell
+   sudo .\segotep-digital.exe -v
+   ```
+4. To run automatically on boot, add a shortcut to Windows Startup (`shell:startup`) or create a Task Scheduler task with "Run with highest privileges".
 
 ---
 
@@ -105,9 +131,10 @@ segotep-digital [OPTIONS]
 | Flag / Option | Default | Description |
 | :--- | :--- | :--- |
 | `-i, --interval-ms <MS>` | `1000` | Update telemetry interval in milliseconds (min: 100ms) |
-| `-m, --model-id <ID>` | *Auto* | Manual override for model ID (detected automatically by default) |
+| `-m, --model-id <ID>` | `3` | Device model ID (`3` for Ice Moon 360 / `1` for Standard Digital) |
 | `-f, --fahrenheit` | `false` | Display temperature in Fahrenheit instead of Celsius |
 | `--screen-off` | `false` | Turn off the 7-segment display screen |
+| `-s, --source <SOURCE>` | `auto` | *(Windows only)* Sensor backend: `auto`, `ldgt`, `hwinfo`, `aida64`, `sysinfo` |
 | `--vid <HEX>` | `1a86` | Custom USB Vendor ID in hexadecimal |
 | `--pid <HEX>` | `a001` | Custom USB Product ID in hexadecimal |
 | `-v, --verbose` | `false` | Print telemetry metrics and sensor stats to stdout |
