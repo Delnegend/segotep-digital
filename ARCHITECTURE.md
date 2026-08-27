@@ -138,46 +138,24 @@ flowchart TD
 
 ---
 
-## 4. Windows Shared Memory IPC & Sensor Engine Architecture
+## 4. Windows Multi-Tier Sensor Engine Fallback
 
-Because user-space Windows applications cannot read x86 MSR registers (like `MSR_RAPL_POWER_UNIT` `0x611` or AMD SMU Mailbox `0x3B10528`) without a Microsoft-attested Ring-0 driver, `segotep-digital` implements a multi-tier zero-overhead shared memory bridge:
+Because reading CPU MSR power counters (`0x611`) and die temperatures on Windows requires Ring-0 kernel access, `segotep-digital` resolves hardware metrics through a clear multi-tier fallback pipeline:
 
 ```mermaid
-flowchart LR
-    subgraph SegotepApp["segotep-digital (Rust Process)"]
-        MAPPER["WindowsSharedMemoryReader"]
-        JSON_P["JSON Stream Parser<br/>(LDGT Bank)"]
-        XML_P["XML Stream Parser<br/>(AIDA64 Bank)"]
-    end
+flowchart TD
+    SAMPLE(["Sample Hardware Telemetry"]) --> TIER1{"Tier 1: Segotep LDGT Engine<br/>('shareMemory_LDGTInfo' 2MB)"}
 
-    subgraph WinKernelMemory["Windows Kernel Shared Memory Bank"]
-        MEM_LDGT["shareMemory_LDGTInfo (2MB)<br/>• Double-buffered JSON live telemetry"]
-        MEM_AIDA["AIDA64_SensorValues (256KB)<br/>• Standardized XML sensor stream"]
-    end
+    TIER1 -->|Memory Mapped & Non-Empty| PARSE_JSON["Parse JSON Stream<br/>• CPU Tctl/Tdie Temp<br/>• CPU Package Power (Watts)<br/>• Active Core Clocks"]
+    TIER1 -->|Not Found / Missing Values| TIER2{"Tier 2: AIDA64 / HWiNFO64 / LHM<br/>('AIDA64_SensorValues' 256KB)"}
 
-    subgraph SensorProviders["Hardware Sensor Engines"]
-        ENGINE_LDGT["Segotep LDGT Helper<br/>• Auto-detected & spawned"]
-        EXT_MONITORS["3rd-Party Monitor<br/>• HWiNFO64 / AIDA64 / LibreHardwareMonitor"]
-        RING0["Attested Ring-0 Kernel Driver<br/>(HWiNFO64.sys / WinRing0.sys)"]
-        HARDWARE["CPU MSRs (RAPL) & AMD SMU<br/>Tctl/Tdie & Package Power"]
-    end
+    PARSE_JSON --> EMIT(["Precision HardwareMetrics Output"])
 
-    MAPPER -->|CreateFileMappingA| MEM_LDGT
-    MAPPER -->|OpenFileMappingA| MEM_AIDA
-    MAPPER -->|Auto-Spawn| ENGINE_LDGT
+    TIER2 -->|Stream Active| PARSE_XML["Parse XML Stream<br/>• Extract TCPU & PPCU (Watts)"]
+    TIER2 -->|Not Running / Empty| TIER3["Tier 3: Native sysinfo Fallback<br/>• User-space CPU Load % & Base Clocks"]
 
-    ENGINE_LDGT --> RING0
-    EXT_MONITORS --> RING0
-    RING0 --> HARDWARE
-    HARDWARE --> RING0
-
-    RING0 -->|Writes JSON| MEM_LDGT
-    EXT_MONITORS -->|Writes XML| MEM_AIDA
-
-    MEM_LDGT --> JSON_P
-    MEM_AIDA --> XML_P
-    JSON_P --> MAPPER
-    XML_P --> MAPPER
+    PARSE_XML --> EMIT
+    TIER3 --> EMIT
 ```
 
 ---
