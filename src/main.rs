@@ -8,7 +8,7 @@ use clap::Parser;
 use segotep_digital::WindowsSensorSource;
 use segotep_digital::protocol::DEFAULT_FALLBACK_MODEL_ID;
 use segotep_digital::{PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
@@ -23,9 +23,9 @@ struct Args {
     #[arg(short, long, default_value_t = 1000)]
     interval_ms: u64,
 
-    /// Override device model ID (e.g. 1 for Digital standard, 3 for Ice Moon)
-    #[arg(short, long)]
-    model_id: Option<u8>,
+    /// Device model ID (1 for Digital standard, 3 for Ice Moon)
+    #[arg(short, long, default_value_t = DEFAULT_FALLBACK_MODEL_ID)]
+    model_id: u8,
 
     /// Display temperature in Fahrenheit instead of Celsius
     #[arg(short = 'f', long)]
@@ -58,46 +58,6 @@ fn parse_hex_id(id_str: &str, default: u16) -> u16 {
     u16::from_str_radix(clean, 16).unwrap_or(default)
 }
 
-fn initialize_device_connection(
-    dev: &mut SegotepDevice,
-    override_id: Option<u8>,
-    fahrenheit: bool,
-) -> u8 {
-    let mut resolved_id = override_id.unwrap_or(DEFAULT_FALLBACK_MODEL_ID);
-
-    match dev.read_info(500) {
-        Ok(Some(info)) => {
-            if let Some(id) = override_id {
-                resolved_id = id;
-                info!(
-                    "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {}), using manual override: {id}",
-                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
-                );
-            } else if info.model_id > 0 {
-                resolved_id = info.model_id;
-                info!(
-                    "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {})",
-                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
-                );
-            }
-
-            if fahrenheit && !info.is_fahrenheit_capable {
-                warn!(
-                    "Hardware report indicates Fahrenheit may not be supported on this display revision."
-                );
-            }
-        }
-        Ok(None) => {
-            info!("Device connected -> Using Model ID: {resolved_id}");
-        }
-        Err(e) => {
-            debug!("Device report query notice: {e}");
-        }
-    }
-
-    resolved_id
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn main() {
     let args = Args::parse();
@@ -124,6 +84,7 @@ fn main() {
         .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
     info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
+    info!("Model ID: {}", args.model_id);
     #[cfg(target_os = "windows")]
     info!("Windows Sensor Source: {:?}", args.source);
     info!(
@@ -155,23 +116,21 @@ fn main() {
     telemetry.set_windows_sensor_source(args.source);
 
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
-    let mut initial_connection = true;
-    let mut active_model_id = args.model_id.unwrap_or(DEFAULT_FALLBACK_MODEL_ID);
+    let mut is_connected = false;
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
             warn!(
                 "Waiting for Segotep AIO USB device to connect (VID=0x{vid:04x}, PID=0x{pid:04x})..."
             );
-            initial_connection = true;
+            is_connected = false;
             sleep(Duration::from_secs(2));
             continue;
         }
 
-        if initial_connection {
-            active_model_id =
-                initialize_device_connection(&mut dev, args.model_id, args.fahrenheit);
-            initial_connection = false;
+        if !is_connected {
+            info!("Device connected -> Active Model ID: {}", args.model_id);
+            is_connected = true;
         }
 
         let metrics = telemetry.sample();
@@ -183,12 +142,12 @@ fn main() {
                 metrics.cpu_load,
                 metrics.cpu_power_watts,
                 metrics.cpu_clock_mhz,
-                active_model_id
+                args.model_id
             );
         }
 
         let packet = SegotepPacket {
-            model_id: active_model_id,
+            model_id: args.model_id,
             screen_on: !args.screen_off,
             cpu_temp: metrics.cpu_temp,
             cpu_load: metrics.cpu_load,
@@ -203,7 +162,7 @@ fn main() {
 
         if let Err(e) = dev.send(&packet) {
             error!("Failed to send data: {e}. Will reconnect.");
-            initial_connection = true;
+            is_connected = false;
         }
 
         if args.screen_off {
