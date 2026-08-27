@@ -20,7 +20,7 @@ flowchart TB
     subgraph TelemetrySubsystem["Hardware Telemetry Engine (SystemTelemetry)"]
         direction TB
         LINUX_SRC["Linux Native Sources<br/>• /sys/class/hwmon (Temp)<br/>• /sys/class/powercap/intel-rapl (Power)<br/>• /proc/stat (Load)<br/>• /sys/devices/system/cpu (Clock)"]
-        WIN_SRC["Windows Dual-Engine Provider<br/>• Win32 Memory-Mapped File (shareMemory_LDGTInfo)<br/>• Background Ring-0 Sensor Engine (LDGT.exe / HWiNFO64)<br/>• sysinfo Fallback Engine"]
+        WIN_SRC["Windows Multi-Source Engine<br/>• Tier 1: Segotep LDGT JSON Buffer (2MB)<br/>• Tier 2: AIDA64 / HWiNFO / LibreHardwareMonitor XML (256KB)<br/>• Tier 3: Native User-Space sysinfo Fallback"]
     end
 
     subgraph HardwareLayer["Segotep Hardware USB Endpoint"]
@@ -119,23 +119,18 @@ flowchart TD
         L_FREQ["/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq"]
     end
 
-    subgraph WindowsPipeline["Windows Pipeline (Multi-Source / Ring-0 IPC)"]
+    subgraph WindowsPipeline["Windows Multi-Source Pipeline"]
         direction TB
-        W_MAP["Win32 CreateFileMappingA<br/>2MB Shared Memory: 'shareMemory_LDGTInfo'"]
-        W_SPAWN["Auto-Spawn Sensor Engine<br/>C:\\Program Files\\Segotep DigitalCAP\\LDGT.exe"]
-        W_DRIVER["Ring-0 Kernel Driver<br/>HWiNFO64.sys (MSR / SMU / RAPL Access)"]
-        W_PARSE["Zero-Allocation Pattern Scanner<br/>Extracts Tctl/Tdie, Package Power, Clocks from JSON"]
-        W_SYSINFO["sysinfo Fallback Engine<br/>User-space CPU % & Base Frequency"]
+        W_T1["Tier 1: Segotep LDGT / HWiNFO64 Driver (2MB)<br/>• 'shareMemory_LDGTInfo' double buffer<br/>• Auto-spawns LDGT helper if present<br/>• Zero-allocation JSON stream parser"]
+        W_T2["Tier 2: AIDA64 / HWiNFO / LibreHardwareMonitor (256KB)<br/>• 'AIDA64_SensorValues' shared memory<br/>• XML telemetry parser for TCPU / PPCU (Watts) / Clock"]
+        W_T3["Tier 3: Windows Native sysinfo Fallback<br/>• Pure user-space Load % and Base Frequency<br/>• No driver or external service needed"]
     end
 
     SAMPLE_START -->|cfg target_os = linux| LinuxPipeline
     SAMPLE_START -->|cfg target_os = windows| WindowsPipeline
 
-    W_MAP --> W_SPAWN
-    W_SPAWN --> W_DRIVER
-    W_DRIVER -->|Continuous 1000ms Writes| W_MAP
-    W_MAP --> W_PARSE
-    W_PARSE -->|Missing Values| W_SYSINFO
+    W_T1 -->|Missing Data / Standalone| W_T2
+    W_T2 -->|Missing Data / Standalone| W_T3
 
     LinuxPipeline --> MERGE["HardwareMetrics Output"]
     WindowsPipeline --> MERGE
@@ -145,33 +140,44 @@ flowchart TD
 
 ## 4. Windows Shared Memory IPC & Sensor Engine Architecture
 
-Because user-space Windows applications cannot read x86 MSR registers (like `MSR_RAPL_POWER_UNIT` `0x611` or AMD SMU Mailbox `0x3B10528`) without a Microsoft-attested Ring-0 driver, `segotep-digital` implements a zero-overhead shared memory bridge:
+Because user-space Windows applications cannot read x86 MSR registers (like `MSR_RAPL_POWER_UNIT` `0x611` or AMD SMU Mailbox `0x3B10528`) without a Microsoft-attested Ring-0 driver, `segotep-digital` implements a multi-tier zero-overhead shared memory bridge:
 
 ```mermaid
 flowchart LR
     subgraph SegotepApp["segotep-digital (Rust Process)"]
         MAPPER["WindowsSharedMemoryReader"]
-        PARSER["JSON Stream Pattern Parser"]
+        JSON_P["JSON Stream Parser<br/>(LDGT Bank)"]
+        XML_P["XML Stream Parser<br/>(AIDA64 Bank)"]
     end
 
     subgraph WinKernelMemory["Windows Kernel Shared Memory Bank"]
-        MEM_BANK["shareMemory_LDGTInfo (2,097,152 Bytes)<br/>• Bank 0 (0..1MB): Sensor Registry & Active Values<br/>• Bank 1 (1MB..2MB): Alternate Double-Buffer Frame"]
+        MEM_LDGT["shareMemory_LDGTInfo (2MB)<br/>• Double-buffered JSON live telemetry"]
+        MEM_AIDA["AIDA64_SensorValues (256KB)<br/>• Standardized XML sensor stream"]
     end
 
-    subgraph SensorDriverEngine["Ring-0 Sensor Engine (LDGT.exe)"]
-        ENGINE["LDGT Background Service"]
-        RING0["HWiNFO64.sys Ring-0 Kernel Driver"]
-        HARDWARE["Hardware Registers<br/>• AMD Ryzen SMU / Intel MSR RAPL (Power)<br/>• CPU Tctl/Tdie Sensors (Temperature)<br/>• GPU NVAPI / AMD ADL (GPU Stats)"]
+    subgraph SensorProviders["Hardware Sensor Engines"]
+        ENGINE_LDGT["Segotep LDGT Helper<br/>• Auto-detected & spawned"]
+        EXT_MONITORS["3rd-Party Monitor<br/>• HWiNFO64 / AIDA64 / LibreHardwareMonitor"]
+        RING0["Attested Ring-0 Kernel Driver<br/>(HWiNFO64.sys / WinRing0.sys)"]
+        HARDWARE["CPU MSRs (RAPL) & AMD SMU<br/>Tctl/Tdie & Package Power"]
     end
 
-    MAPPER -->|1. CreateFileMappingA / MapViewOfFile| MEM_BANK
-    MAPPER -->|2. Auto-Spawn (if not running)| ENGINE
-    ENGINE -->|3. Loads Driver| RING0
-    RING0 -->|4. Polls MSR/SMU Registers| HARDWARE
-    HARDWARE -->|5. Raw Sensor Data| RING0
-    RING0 -->|6. Writes Formatted JSON Buffer| MEM_BANK
-    MEM_BANK -->|7. Zero-Copy Slice Scan| PARSER
-    PARSER -->|8. Precision Metrics| MAPPER
+    MAPPER -->|CreateFileMappingA| MEM_LDGT
+    MAPPER -->|OpenFileMappingA| MEM_AIDA
+    MAPPER -->|Auto-Spawn| ENGINE_LDGT
+
+    ENGINE_LDGT --> RING0
+    EXT_MONITORS --> RING0
+    RING0 --> HARDWARE
+    HARDWARE --> RING0
+
+    RING0 -->|Writes JSON| MEM_LDGT
+    EXT_MONITORS -->|Writes XML| MEM_AIDA
+
+    MEM_LDGT --> JSON_P
+    MEM_AIDA --> XML_P
+    JSON_P --> MAPPER
+    XML_P --> MAPPER
 ```
 
 ---
