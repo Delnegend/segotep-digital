@@ -178,90 +178,33 @@ flowchart LR
 
 ## 5. Screen State Machine & Lifecycle
 
-The display controller follows a strict state transition model to prevent hanging screens or frozen numbers across system reboots and shutdowns:
+The display controller follows a robust state transition model to handle connection initialization, telemetry streaming, device disconnect/reconnect cycles, and clean screen power-off on shutdown:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Disconnected: App Launched
 
     Disconnected --> Probing: Locate VID 0x1A86 / PID 0xA001
-    Probing --> Disconnected: Device Not Found (Retry every 2s)
+    Probing --> Disconnected: Device Not Found (Retry loop)
 
-    Probing --> Initializing: HID Device Connected
-    Initializing --> AutoDetect: Query Input Report (500ms timeout)
+    Probing --> Initializing: Device Connected via HID
+    Initializing --> AutoDetecting: Query Hardware Feature Report (500ms)
     
-    AutoDetect --> Running: Handshake OK / Fallback Applied
-    AutoDetect --> Running: User Override Model ID (-m)
+    AutoDetecting --> Streaming: Report Received (Model ID Resolved)
+    AutoDetecting --> Streaming: Timeout Fallback / User Override (-m)
 
-    state Running {
-        [*] --> SamplingTelemetry
-        SamplingTelemetry --> EncodingPacket: Read CPU & GPU Metrics
-        EncodingPacket --> TransmittingReport: Build 34-byte Report
-        TransmittingReport --> Sleeping: hid_write() OK
-        Sleeping --> SamplingTelemetry: Next Tick (1000ms)
-        TransmittingReport --> Disconnected: USB Unplugged / I/O Error
+    state Streaming {
+        [*] --> SampleMetrics
+        SampleMetrics --> BuildPacket: Read Sensors
+        BuildPacket --> SendReport: Encode 34-byte Header & Values
+        SendReport --> WaitTick: hid_write() Success
+        WaitTick --> SampleMetrics: Interval Elapsed (e.g. 1000ms)
     }
 
-    Running --> TurningOff: SIGINT / SIGTERM / --screen-off
-    TurningOff --> Disconnected: Send Screen-OFF Packet (State: 0x0E, Model: 0x0F)
-    Disconnected --> [*]: Process Exit
-```
-
----
-
-## 6. Project Component Hierarchy
-
-```mermaid
-classDiagram
-    class SegotepDevice {
-        -Option~HidDevice~ device
-        -u16 vendor_id
-        -u16 product_id
-        +new() Result~Self~
-        +with_custom_ids(vid, pid) Result~Self~
-        +read_info(timeout_ms) Result~Option~DeviceInfo~~
-        +send_telemetry(packet) Result~()~
-        +turn_off_screen() Result~()~
-        +close()
-    }
-
-    class SegotepPacket {
-        +bool screen_off
-        +u8 model_id
-        +u8 cpu_temp
-        +u8 cpu_load
-        +u16 cpu_power_watts
-        +u16 cpu_clock_mhz
-        +u8 gpu_temp
-        +u8 gpu_load
-        +u16 gpu_power_watts
-        +u16 gpu_clock_mhz
-        +bool is_fahrenheit
-        +to_bytes() [u8; 34]
-    }
-
-    class SystemTelemetry {
-        -CpuTempMonitor temp
-        -CpuLoadMonitor load
-        -CpuPowerMonitor power
-        -CpuFreqMonitor freq
-        -WindowsSharedMemoryReader win_sensors
-        +new() Self
-        +sample() HardwareMetrics
-    }
-
-    class WindowsSharedMemoryReader {
-        -HANDLE handle
-        -*const u8 buffer_ptr
-        -bool is_open
-        -bool tried_autostart
-        -u32 sample_count
-        +try_open() bool
-        +sample() WindowsSensorValues
-        +close()
-    }
-
-    SegotepDevice --> SegotepPacket : Transmits
-    SystemTelemetry --> WindowsSharedMemoryReader : On Windows
-    SystemTelemetry ..> SegotepPacket : Populates Metrics
+    Streaming --> Disconnected: USB Unplugged / Send Error
+    Streaming --> TurningOff: Termination Signal (SIGINT / Ctrl-C)
+    Streaming --> TurningOff: Flag --screen-off
+    
+    TurningOff --> Disconnected: Transmit Screen-OFF Packet (0x0E / 0x0F)
+    Disconnected --> [*]: Process Terminated
 ```
