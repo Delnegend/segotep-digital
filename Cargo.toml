@@ -1,0 +1,15 @@
+[package]
+name = "segotep-digital-rs"
+version = "0.1.0"
+edition = "2024"
+authors = ["Delnegend <kiennguyen19323@gmail.com>"]
+description = "Linux driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+hidapi = "2.6.6"
+sysinfo = "0.33.1"
+clap = { version = "4.5.31", features = ["derive"] }
+log = "0.4.34"
+env_logger = "0.11.11"
+ctrlc = "3.5.2"
