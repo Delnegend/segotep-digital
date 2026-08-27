@@ -11,7 +11,6 @@ use log::{debug, error, info, warn};
 use crate::protocol::{PRODUCT_ID, SegotepPacket, VENDOR_ID};
 
 /// Device capabilities and status received from device input reports.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct DeviceInfo {
     pub model_id: u8,
@@ -28,7 +27,9 @@ pub struct SegotepDevice {
 
 impl SegotepDevice {
     /// Creates a new device manager instance with default IDs.
-    #[allow(dead_code)]
+    ///
+    /// # Errors
+    /// Returns `HidError` if the underlying HID subsystem fails to initialize.
     pub fn new() -> Result<Self, hidapi::HidError> {
         let api = HidApi::new()?;
         Ok(Self {
@@ -40,6 +41,9 @@ impl SegotepDevice {
     }
 
     /// Allows overriding VID/PID if using an alternative model.
+    ///
+    /// # Errors
+    /// Returns `HidError` if the underlying HID subsystem fails to initialize.
     pub fn with_custom_ids(vendor_id: u16, product_id: u16) -> Result<Self, hidapi::HidError> {
         let api = HidApi::new()?;
         Ok(Self {
@@ -51,6 +55,9 @@ impl SegotepDevice {
     }
 
     /// Attempts to connect or reconnect to the USB HID device.
+    ///
+    /// # Errors
+    /// Returns an error message if the HID device fails to open.
     pub fn connect(&mut self) -> Result<(), String> {
         if self.device.is_some() {
             return Ok(());
@@ -58,7 +65,7 @@ impl SegotepDevice {
 
         // Refresh enumerated devices list
         if let Err(e) = self.api.refresh_devices() {
-            debug!("Device refresh warning: {}", e);
+            debug!("Device refresh warning: {e}");
         }
 
         match self.api.open(self.vendor_id, self.product_id) {
@@ -71,26 +78,29 @@ impl SegotepDevice {
                 Ok(())
             }
             Err(e) => Err(format!(
-                "Failed to open device (VID=0x{:04x}, PID=0x{:04x}): {}",
-                self.vendor_id, self.product_id, e
+                "Failed to open device (VID=0x{:04x}, PID=0x{:04x}): {e}",
+                self.vendor_id, self.product_id
             )),
         }
     }
 
     /// Sends a telemetry packet to the AIO screen.
+    ///
+    /// # Errors
+    /// Returns an error message if the write operation fails or the device is not connected.
     pub fn send(&mut self, packet: &SegotepPacket) -> Result<(), String> {
         let data = packet.serialize();
 
         if let Some(ref dev) = self.device {
             match dev.write(&data) {
                 Ok(bytes_written) => {
-                    debug!("Sent {} bytes to screen", bytes_written);
+                    debug!("Sent {bytes_written} bytes to screen");
                     Ok(())
                 }
                 Err(e) => {
-                    warn!("Write failed ({}), disconnecting device...", e);
+                    warn!("Write failed ({e}), disconnecting device...");
                     self.device = None;
-                    Err(format!("Write error: {}", e))
+                    Err(format!("Write error: {e}"))
                 }
             }
         } else {
@@ -99,63 +109,65 @@ impl SegotepDevice {
     }
 
     /// Read optional incoming report to fetch device hardware capabilities.
-    #[allow(dead_code)]
+    ///
+    /// # Errors
+    /// Returns an error if the device is not connected.
+    #[allow(clippy::indexing_slicing)]
     pub fn read_info(&mut self, timeout_ms: i32) -> Result<Option<DeviceInfo>, String> {
-        if let Some(ref dev) = self.device {
-            let mut buf = [0u8; 64];
-            match dev.read_timeout(&mut buf, timeout_ms) {
-                Ok(len) if len >= 10 => {
-                    let model_id = buf[5];
-                    let capability_mask = buf[8];
-                    let is_fahrenheit_capable = buf[9] == 1;
+        self.device.as_ref().map_or_else(
+            || Err("Device not connected".into()),
+            |dev| {
+                let mut buf = [0u8; 64];
+                match dev.read_timeout(&mut buf, timeout_ms) {
+                    Ok(len) if len >= 10 => {
+                        let model_id = buf[5];
+                        let capability_mask = buf[8];
+                        let is_fahrenheit_capable = buf[9] == 1;
 
-                    Ok(Some(DeviceInfo {
-                        model_id,
-                        capability_mask,
-                        is_fahrenheit_capable,
-                    }))
+                        Ok(Some(DeviceInfo {
+                            model_id,
+                            capability_mask,
+                            is_fahrenheit_capable,
+                        }))
+                    }
+                    Ok(_) => Ok(None),
+                    Err(e) => {
+                        debug!("Read info timed out or failed: {e}");
+                        Ok(None)
+                    }
                 }
-                Ok(_) => Ok(None),
-                Err(e) => {
-                    debug!("Read info timed out or failed: {}", e);
-                    Ok(None)
-                }
-            }
-        } else {
-            Err("Device not connected".into())
-        }
+            },
+        )
     }
 
     /// Runs a resilient update loop with auto-reconnect.
-    #[allow(dead_code)]
     pub fn run_loop<F>(
         &mut self,
         interval: Duration,
-        running: Arc<AtomicBool>,
+        running: &Arc<AtomicBool>,
         mut get_telemetry: F,
     ) where
         F: FnMut() -> SegotepPacket,
     {
-        info!("Starting update loop with interval {:?}", interval);
+        info!("Starting update loop with interval {interval:?}");
 
         while running.load(Ordering::Relaxed) {
             if self.device.is_none()
                 && let Err(e) = self.connect()
             {
-                warn!("{}. Retrying in 2 seconds...", e);
+                warn!("{e}. Retrying in 2 seconds...");
                 sleep(Duration::from_secs(2));
                 continue;
             }
 
             let packet = get_telemetry();
             if let Err(e) = self.send(&packet) {
-                error!("Telemetry send failed: {}", e);
+                error!("Telemetry send failed: {e}");
             }
 
             sleep(interval);
         }
 
-        // On shutdown, optionally clear or maintain state
         info!("Shutting down device communication...");
     }
 }

@@ -11,10 +11,10 @@ use cpu_power::CpuPowerMonitor;
 use cpu_temp::CpuTempMonitor;
 
 pub struct SystemTelemetry {
-    temp_mon: CpuTempMonitor,
-    load_mon: CpuLoadMonitor,
-    power_mon: CpuPowerMonitor,
-    freq_mon: CpuFreqMonitor,
+    temp: CpuTempMonitor,
+    load: CpuLoadMonitor,
+    power: CpuPowerMonitor,
+    freq: CpuFreqMonitor,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -36,21 +36,22 @@ impl Default for SystemTelemetry {
 }
 
 impl SystemTelemetry {
+    #[must_use]
     pub fn new() -> Self {
         Self {
-            temp_mon: CpuTempMonitor::new(),
-            load_mon: CpuLoadMonitor::new(),
-            power_mon: CpuPowerMonitor::new(),
-            freq_mon: CpuFreqMonitor::new(),
+            temp: CpuTempMonitor::new(),
+            load: CpuLoadMonitor::new(),
+            power: CpuPowerMonitor::new(),
+            freq: CpuFreqMonitor::new(),
         }
     }
 
     /// Samples all telemetry values.
     pub fn sample(&mut self) -> HardwareMetrics {
-        let cpu_temp = self.temp_mon.get_temp();
-        let cpu_load = self.load_mon.get_load_pct();
-        let cpu_power_watts = self.power_mon.get_power_watts();
-        let cpu_clock_mhz = self.freq_mon.get_freq_mhz();
+        let cpu_temp = self.temp.get_temp();
+        let cpu_load = self.load.get_load_pct();
+        let cpu_power_watts = self.power.get_power_watts();
+        let cpu_clock_mhz = self.freq.get_freq_mhz();
 
         HardwareMetrics {
             cpu_temp,

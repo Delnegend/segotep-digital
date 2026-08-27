@@ -20,14 +20,13 @@ impl Default for CpuPowerMonitor {
 }
 
 impl CpuPowerMonitor {
+    #[must_use]
     pub fn new() -> Self {
         let (energy_path, max_range) = find_energy_source();
 
-        let initial_energy = if let Some(ref path) = energy_path {
-            read_u64_from_file(path).unwrap_or(0)
-        } else {
-            0
-        };
+        let initial_energy = energy_path
+            .as_ref()
+            .map_or(0, |path| read_u64_from_file(path).unwrap_or(0));
 
         Self {
             energy_path,
@@ -39,6 +38,13 @@ impl CpuPowerMonitor {
     }
 
     /// Calculates CPU power in Watts based on the energy counter delta.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::as_conversions,
+        clippy::arithmetic_side_effects,
+        clippy::cast_precision_loss
+    )]
     pub fn get_power_watts(&mut self) -> u16 {
         let Some(ref path) = self.energy_path else {
             return 0;
@@ -89,7 +95,10 @@ fn find_energy_source() -> (Option<PathBuf>, Option<u64>) {
         let max_range = read_u64_from_file(Path::new(
             "/sys/class/powercap/intel-rapl/intel-rapl:0/max_energy_range_uj",
         ));
-        debug!("Found Intel/AMD RAPL energy file: {:?}", rapl_package);
+        debug!(
+            "Found Intel/AMD RAPL energy file: {}",
+            rapl_package.display()
+        );
         return (Some(rapl_package.to_path_buf()), max_range);
     }
 
@@ -102,7 +111,7 @@ fn find_energy_source() -> (Option<PathBuf>, Option<u64>) {
             let path = entry.path();
             let energy_node = path.join("energy1_input");
             if energy_node.exists() {
-                debug!("Found hwmon energy node: {:?}", energy_node);
+                debug!("Found hwmon energy node: {}", energy_node.display());
                 return (Some(energy_node), None);
             }
         }

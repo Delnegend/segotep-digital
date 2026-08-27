@@ -17,6 +17,7 @@ impl Default for CpuTempMonitor {
 }
 
 impl CpuTempMonitor {
+    #[must_use]
     pub fn new() -> Self {
         let direct_sensor_path = find_hwmon_cpu_temp();
         let mut components = Components::new();
@@ -29,6 +30,12 @@ impl CpuTempMonitor {
     }
 
     /// Fetches the current CPU temperature in whole degrees Celsius.
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::as_conversions,
+        clippy::arithmetic_side_effects
+    )]
     pub fn get_temp(&mut self) -> u8 {
         // Method 1: Direct sysfs hwmon read (fastest, zero overhead)
         if let Some(ref path) = self.direct_sensor_path
@@ -68,6 +75,7 @@ impl CpuTempMonitor {
 }
 
 /// Searches `/sys/class/hwmon/` for known CPU temperature sensor nodes.
+#[allow(clippy::indexing_slicing)]
 fn find_hwmon_cpu_temp() -> Option<PathBuf> {
     let hwmon_dir = Path::new("/sys/class/hwmon");
     if !hwmon_dir.exists() {
@@ -89,8 +97,8 @@ fn find_hwmon_cpu_temp() -> Option<PathBuf> {
                 {
                     // Look for temp1_input, temp2_input (Tctl/Tdie)
                     for i in 1..=8 {
-                        let temp_file = path.join(format!("temp{}_input", i));
-                        let label_file = path.join(format!("temp{}_label", i));
+                        let temp_file = path.join(format!("temp{i}_input"));
+                        let label_file = path.join(format!("temp{i}_label"));
 
                         if temp_file.exists() {
                             if let Ok(label) = fs::read_to_string(&label_file) {
@@ -99,13 +107,16 @@ fn find_hwmon_cpu_temp() -> Option<PathBuf> {
                                     || label.contains("tdie")
                                     || label.contains("package")
                                 {
-                                    debug!("Found CPU temp sensor: {:?} ({})", temp_file, label);
+                                    debug!(
+                                        "Found CPU temp sensor: {} ({label})",
+                                        temp_file.display()
+                                    );
                                     return Some(temp_file);
                                 }
                             }
                             // If no specific label, take the first temp input
                             if i == 1 {
-                                debug!("Found CPU temp sensor: {:?}", temp_file);
+                                debug!("Found CPU temp sensor: {}", temp_file.display());
                                 return Some(temp_file);
                             }
                         }

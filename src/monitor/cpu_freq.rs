@@ -14,6 +14,7 @@ impl Default for CpuFreqMonitor {
 }
 
 impl CpuFreqMonitor {
+    #[must_use]
     pub fn new() -> Self {
         let mut sys = System::new();
         sys.refresh_cpu_frequency();
@@ -21,6 +22,11 @@ impl CpuFreqMonitor {
     }
 
     /// Fetches the primary/average CPU clock speed in MHz.
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::as_conversions,
+        clippy::arithmetic_side_effects
+    )]
     pub fn get_freq_mhz(&mut self) -> u16 {
         // Direct read from Linux cpufreq if available (scaling_cur_freq is in kHz)
         if let Ok(content) =
@@ -35,7 +41,7 @@ impl CpuFreqMonitor {
         let cpus = self.sys.cpus();
         if !cpus.is_empty() {
             let avg_mhz: u64 =
-                cpus.iter().map(|c| c.frequency()).sum::<u64>() / (cpus.len() as u64);
+                cpus.iter().map(sysinfo::Cpu::frequency).sum::<u64>() / (cpus.len() as u64);
             return avg_mhz.clamp(0, 65535) as u16;
         }
 

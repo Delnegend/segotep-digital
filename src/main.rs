@@ -6,8 +6,7 @@ use std::time::Duration;
 use clap::Parser;
 use log::{error, info, warn};
 use segotep_digital::{
-    DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry,
-    VENDOR_ID,
+    DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID,
 };
 
 #[derive(Parser, Debug)]
@@ -60,33 +59,37 @@ fn main() {
     let vid = args
         .vid
         .as_deref()
-        .map(|s| parse_hex_id(s, VENDOR_ID))
-        .unwrap_or(VENDOR_ID);
+        .map_or(VENDOR_ID, |s| parse_hex_id(s, VENDOR_ID));
     let pid = args
         .pid
         .as_deref()
-        .map(|s| parse_hex_id(s, PRODUCT_ID))
-        .unwrap_or(PRODUCT_ID);
+        .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
     info!("Starting Segotep Digital Linux Driver");
-    info!("Target Device: VID=0x{:04x}, PID=0x{:04x}, Model={}", vid, pid, args.model_id);
-    info!("Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}", args.interval_ms, args.fahrenheit, args.screen_off);
+    info!(
+        "Target Device: VID=0x{:04x}, PID=0x{:04x}, Model={}",
+        vid, pid, args.model_id
+    );
+    info!(
+        "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
+        args.interval_ms, args.fahrenheit, args.screen_off
+    );
 
     let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
+    let r = Arc::clone(&running);
 
     // Signal handler for graceful termination
     if let Err(e) = ctrlc::set_handler(move || {
         info!("Received termination signal. Exiting...");
         r.store(false, Ordering::Relaxed);
     }) {
-        warn!("Failed to set Ctrl-C handler: {}", e);
+        warn!("Failed to set Ctrl-C handler: {e}");
     }
 
     let mut dev = match SegotepDevice::with_custom_ids(vid, pid) {
         Ok(d) => d,
         Err(e) => {
-            error!("Failed to initialize HID API: {}", e);
+            error!("Failed to initialize HID API: {e}");
             return;
         }
     };
@@ -97,7 +100,9 @@ fn main() {
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
-            warn!("Waiting for Segotep AIO USB device to connect (VID=0x{:04x}, PID=0x{:04x})...", vid, pid);
+            warn!(
+                "Waiting for Segotep AIO USB device to connect (VID=0x{vid:04x}, PID=0x{pid:04x})..."
+            );
             initial_connection = true;
             sleep(Duration::from_secs(2));
             continue;
@@ -138,7 +143,7 @@ fn main() {
         };
 
         if let Err(e) = dev.send(&packet) {
-            error!("Failed to send data: {}. Will reconnect.", e);
+            error!("Failed to send data: {e}. Will reconnect.");
             initial_connection = true;
         }
 

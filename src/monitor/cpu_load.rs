@@ -18,6 +18,7 @@ impl Default for CpuLoadMonitor {
 }
 
 impl CpuLoadMonitor {
+    #[must_use]
     pub fn new() -> Self {
         let mut sys = System::new();
         sys.refresh_cpu_usage();
@@ -33,6 +34,13 @@ impl CpuLoadMonitor {
     }
 
     /// Fetches the overall CPU utilization as a percentage (0-100).
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::as_conversions,
+        clippy::arithmetic_side_effects,
+        clippy::cast_precision_loss
+    )]
     pub fn get_load_pct(&mut self) -> u8 {
         // Method 1: High precision /proc/stat delta calculation
         if let Some((prev_total, prev_work)) = self.last_stat {
@@ -65,7 +73,8 @@ impl CpuLoadMonitor {
     }
 }
 
-/// Reads line 1 of /proc/stat: "cpu user nice system idle iowait irq softirq steal guest guest_nice"
+/// Reads line 1 of `/proc/stat`: "cpu user nice system idle iowait irq softirq steal guest `guest_nice`"
+#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 fn read_proc_stat_cpu() -> Option<(u64, u64)> {
     let content = fs::read_to_string("/proc/stat").ok()?;
     let first_line = content.lines().next()?;
