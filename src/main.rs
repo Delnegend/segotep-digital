@@ -16,7 +16,7 @@ use protocol::{DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepPacket, VENDOR_ID};
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "segotep-digital-rs",
+    name = "segotep-digital",
     author = "Delnegend <kiennguyen19323@gmail.com>",
     version = "0.1.0",
     about = "Linux driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"

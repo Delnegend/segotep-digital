@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/segotep-digital-rs --interval-ms 1000
+ExecStart=/usr/local/bin/segotep-digital --interval-ms 1000
 Restart=always
 RestartSec=3
 StandardOutput=journal

@@ -1,4 +1,4 @@
-# segotep-digital-rs
+# Segotep Digital
 
 An open-source, ultra-lightweight Linux driver and daemon for **Segotep Ice Moon** (and other Segotep Digital series) AIO liquid coolers with integrated 7-segment pump-block displays.
 
@@ -63,14 +63,14 @@ source $HOME/.cargo/env
 
 ### 3. Build & Install Binary
 ```bash
-git clone https://github.com/your-username/segotep-digital-rs.git
-cd segotep-digital-rs
+git clone https://github.com/Delnegend/segotep-digital.git
+cd segotep-digital
 
 # Compile release binary
 cargo build --release
 
 # Install binary to system path
-sudo cp target/release/segotep-digital-rs /usr/local/bin/
+sudo cp target/release/segotep-digital /usr/local/bin/
 ```
 
 ### 4. Setup udev Rules (Non-root USB Access)
@@ -83,7 +83,7 @@ sudo udevadm trigger
 ### 5. Test the Binary
 ```bash
 # Run with verbose output
-segotep-digital-rs -v
+segotep-digital -v
 ```
 
 ---
@@ -109,7 +109,7 @@ sudo systemctl status segotep-digital.service
 ## CLI Options
 
 ```text
-segotep-digital-rs [OPTIONS]
+segotep-digital [OPTIONS]
 
 Options:
   -i, --interval-ms <INTERVAL_MS>  Update interval in milliseconds [default: 1000]

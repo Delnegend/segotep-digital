@@ -15,7 +15,7 @@ on:
         default: false
 
 env:
-  BINARY_NAME: segotep-digital-rs
+  BINARY_NAME: segotep-digital
   VERSION: ${{ inputs.release_version }}
 
 jobs:
@@ -121,8 +121,8 @@ jobs:
               echo
             fi
             echo "**Installation**"
-            echo "1. Extract the tarball: \`tar -xJf segotep-digital-rs-v${VERSION}-linux-amd64.tar.xz\`"
-            echo "2. Copy binary: \`sudo cp segotep-digital-rs /usr/local/bin/\`"
+            echo "1. Extract the tarball: \`tar -xJf segotep-digital-v${VERSION}-linux-amd64.tar.xz\`"
+            echo "2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`"
             echo "3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`"
             echo "4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`"
             if [ -n "$COMPARE" ]; then

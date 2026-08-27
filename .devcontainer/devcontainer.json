@@ -1,6 +1,6 @@
 {
 	"$schema": "https://github.com/devcontainers/spec/raw/refs/heads/main/schemas/devContainer.base.schema.json",
-	"name": "segotep-digital-rs",
+	"name": "segotep-digital",
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
