@@ -7,6 +7,12 @@ pub struct CpuFreqMonitor {
     sys: System,
 }
 
+impl Default for CpuFreqMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuFreqMonitor {
     pub fn new() -> Self {
         let mut sys = System::new();
@@ -19,10 +25,9 @@ impl CpuFreqMonitor {
         // Direct read from Linux cpufreq if available (scaling_cur_freq is in kHz)
         if let Ok(content) =
             fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+            && let Ok(khz) = content.trim().parse::<u32>()
         {
-            if let Ok(khz) = content.trim().parse::<u32>() {
-                return (khz / 1000).clamp(0, 65535) as u16;
-            }
+            return (khz / 1000).clamp(0, 65535) as u16;
         }
 
         // Fallback to sysinfo

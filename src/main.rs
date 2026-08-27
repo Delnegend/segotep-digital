@@ -5,14 +5,10 @@ use std::time::Duration;
 
 use clap::Parser;
 use log::{error, info, warn};
-
-mod device;
-mod monitor;
-mod protocol;
-
-use device::SegotepDevice;
-use monitor::SystemTelemetry;
-use protocol::{DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepPacket, VENDOR_ID};
+use segotep_digital::{
+    DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry,
+    VENDOR_ID,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -73,14 +69,8 @@ fn main() {
         .unwrap_or(PRODUCT_ID);
 
     info!("Starting Segotep Digital Linux Driver");
-    info!(
-        "Target Device: VID=0x{:04x}, PID=0x{:04x}, Model={}",
-        vid, pid, args.model_id
-    );
-    info!(
-        "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
-        args.interval_ms, args.fahrenheit, args.screen_off
-    );
+    info!("Target Device: VID=0x{:04x}, PID=0x{:04x}, Model={}", vid, pid, args.model_id);
+    info!("Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}", args.interval_ms, args.fahrenheit, args.screen_off);
 
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -103,15 +93,25 @@ fn main() {
 
     let mut telemetry = SystemTelemetry::new();
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
+    let mut initial_connection = true;
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
-            warn!(
-                "Waiting for Segotep AIO USB device to connect (VID=0x{:04x}, PID=0x{:04x})...",
-                vid, pid
-            );
+            warn!("Waiting for Segotep AIO USB device to connect (VID=0x{:04x}, PID=0x{:04x})...", vid, pid);
+            initial_connection = true;
             sleep(Duration::from_secs(2));
             continue;
+        }
+
+        // Query and log device capabilities once upon connection
+        if initial_connection {
+            if let Ok(Some(info)) = dev.read_info(100) {
+                info!(
+                    "Device initialized -> Model ID: {}, Capability Mask: 0x{:02x}, Fahrenheit Capable: {}",
+                    info.model_id, info.capability_mask, info.is_fahrenheit_capable
+                );
+            }
+            initial_connection = false;
         }
 
         let metrics = telemetry.sample();
@@ -139,6 +139,7 @@ fn main() {
 
         if let Err(e) = dev.send(&packet) {
             error!("Failed to send data: {}. Will reconnect.", e);
+            initial_connection = true;
         }
 
         sleep(tick_interval);

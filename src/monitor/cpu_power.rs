@@ -13,6 +13,12 @@ pub struct CpuPowerMonitor {
     last_calculated_watts: u16,
 }
 
+impl Default for CpuPowerMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuPowerMonitor {
     pub fn new() -> Self {
         let (energy_path, max_range) = find_energy_source();
@@ -89,15 +95,15 @@ fn find_energy_source() -> (Option<PathBuf>, Option<u64>) {
 
     // 2. Check /sys/class/hwmon for amd_energy or similar power1_input
     let hwmon_dir = Path::new("/sys/class/hwmon");
-    if hwmon_dir.exists() {
-        if let Ok(entries) = fs::read_dir(hwmon_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let energy_node = path.join("energy1_input");
-                if energy_node.exists() {
-                    debug!("Found hwmon energy node: {:?}", energy_node);
-                    return (Some(energy_node), None);
-                }
+    if hwmon_dir.exists()
+        && let Ok(entries) = fs::read_dir(hwmon_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let energy_node = path.join("energy1_input");
+            if energy_node.exists() {
+                debug!("Found hwmon energy node: {:?}", energy_node);
+                return (Some(energy_node), None);
             }
         }
     }

@@ -29,6 +29,12 @@ pub struct HardwareMetrics {
     pub gpu_clock_mhz: u16,
 }
 
+impl Default for SystemTelemetry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemTelemetry {
     pub fn new() -> Self {
         Self {

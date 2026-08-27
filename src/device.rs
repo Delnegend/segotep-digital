@@ -1,16 +1,17 @@
 //! USB HID connection and communication management.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::sleep;
 use std::time::Duration;
 
 use hidapi::{HidApi, HidDevice};
 use log::{debug, error, info, warn};
 
-use crate::protocol::{SegotepPacket, PRODUCT_ID, VENDOR_ID};
+use crate::protocol::{PRODUCT_ID, SegotepPacket, VENDOR_ID};
 
 /// Device capabilities and status received from device input reports.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub struct DeviceInfo {
     pub model_id: u8,
@@ -26,7 +27,8 @@ pub struct SegotepDevice {
 }
 
 impl SegotepDevice {
-    /// Creates a new device manager instance.
+    /// Creates a new device manager instance with default IDs.
+    #[allow(dead_code)]
     pub fn new() -> Result<Self, hidapi::HidError> {
         let api = HidApi::new()?;
         Ok(Self {
@@ -97,6 +99,7 @@ impl SegotepDevice {
     }
 
     /// Read optional incoming report to fetch device hardware capabilities.
+    #[allow(dead_code)]
     pub fn read_info(&mut self, timeout_ms: i32) -> Result<Option<DeviceInfo>, String> {
         if let Some(ref dev) = self.device {
             let mut buf = [0u8; 64];
@@ -124,6 +127,7 @@ impl SegotepDevice {
     }
 
     /// Runs a resilient update loop with auto-reconnect.
+    #[allow(dead_code)]
     pub fn run_loop<F>(
         &mut self,
         interval: Duration,
@@ -135,12 +139,12 @@ impl SegotepDevice {
         info!("Starting update loop with interval {:?}", interval);
 
         while running.load(Ordering::Relaxed) {
-            if self.device.is_none() {
-                if let Err(e) = self.connect() {
-                    warn!("{}. Retrying in 2 seconds...", e);
-                    sleep(Duration::from_secs(2));
-                    continue;
-                }
+            if self.device.is_none()
+                && let Err(e) = self.connect()
+            {
+                warn!("{}. Retrying in 2 seconds...", e);
+                sleep(Duration::from_secs(2));
+                continue;
             }
 
             let packet = get_telemetry();

@@ -10,6 +10,12 @@ pub struct CpuTempMonitor {
     components: Components,
 }
 
+impl Default for CpuTempMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuTempMonitor {
     pub fn new() -> Self {
         let direct_sensor_path = find_hwmon_cpu_temp();
@@ -25,13 +31,12 @@ impl CpuTempMonitor {
     /// Fetches the current CPU temperature in whole degrees Celsius.
     pub fn get_temp(&mut self) -> u8 {
         // Method 1: Direct sysfs hwmon read (fastest, zero overhead)
-        if let Some(ref path) = self.direct_sensor_path {
-            if let Ok(content) = fs::read_to_string(path) {
-                if let Ok(milli_c) = content.trim().parse::<i32>() {
-                    let temp = (milli_c / 1000).clamp(0, 255) as u8;
-                    return temp;
-                }
-            }
+        if let Some(ref path) = self.direct_sensor_path
+            && let Ok(content) = fs::read_to_string(path)
+            && let Ok(milli_c) = content.trim().parse::<i32>()
+        {
+            let temp = (milli_c / 1000).clamp(0, 255) as u8;
+            return temp;
         }
 
         // Method 2: Fallback to sysinfo components
@@ -40,17 +45,17 @@ impl CpuTempMonitor {
 
         for component in &self.components {
             let label = component.label().to_lowercase();
-            if label.contains("cpu")
+            let is_cpu = label.contains("cpu")
                 || label.contains("tctl")
                 || label.contains("tdie")
                 || label.contains("package")
-                || label.contains("core")
+                || label.contains("core");
+
+            if is_cpu
+                && let Some(temp) = component.temperature()
+                && temp > best_temp
             {
-                if let Some(temp) = component.temperature() {
-                    if temp > best_temp {
-                        best_temp = temp;
-                    }
-                }
+                best_temp = temp;
             }
         }
 
