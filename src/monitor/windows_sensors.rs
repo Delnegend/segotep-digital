@@ -1,7 +1,7 @@
 //! Windows shared memory sensor provider (Segotep LDGT, `HWiNFO`, `AIDA64`, `LibreHardwareMonitor`).
 
 #[cfg(target_os = "windows")]
-use std::ffi::c_void;
+use std::ffi::{CStr, c_void};
 #[cfg(target_os = "windows")]
 use std::path::Path;
 #[cfg(target_os = "windows")]
@@ -16,6 +16,10 @@ use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows_sys::Win32::System::Memory::{
     CreateFileMappingA, FILE_MAP_ALL_ACCESS, FILE_MAP_READ, MapViewOfFile, OpenFileMappingA,
     PAGE_READWRITE, UnmapViewOfFile,
+};
+#[cfg(target_os = "windows")]
+use windows_sys::Win32::System::Threading::{
+    OpenMutexW, ReleaseMutex, SYNCHRONIZATION_SYNCHRONIZE, WaitForSingleObject,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -32,6 +36,9 @@ pub struct WindowsSensorValues {
 pub struct WindowsSharedMemoryReader {
     ldgt_handle: HANDLE,
     ldgt_ptr: *const u8,
+    hwinfo_handle: HANDLE,
+    hwinfo_ptr: *const u8,
+    hwinfo_mutex: HANDLE,
     aida_handle: HANDLE,
     aida_ptr: *const u8,
     is_open: bool,
@@ -53,6 +60,9 @@ impl WindowsSharedMemoryReader {
         Self {
             ldgt_handle: std::ptr::null_mut(),
             ldgt_ptr: std::ptr::null(),
+            hwinfo_handle: std::ptr::null_mut(),
+            hwinfo_ptr: std::ptr::null(),
+            hwinfo_mutex: std::ptr::null_mut(),
             aida_handle: std::ptr::null_mut(),
             aida_ptr: std::ptr::null(),
             is_open: false,
@@ -61,16 +71,18 @@ impl WindowsSharedMemoryReader {
         }
     }
 
-    /// Creates or opens `shareMemory_LDGTInfo` and `AIDA64_SensorValues` memory banks.
+    /// Creates or opens `shareMemory_LDGTInfo`, official `Global\HWiNFO_SENS_SM2`, and `AIDA64_SensorValues`.
     #[allow(clippy::as_conversions, clippy::if_not_else)]
     pub fn try_open(&mut self) -> bool {
-        if self.is_open && (!self.ldgt_ptr.is_null() || !self.aida_ptr.is_null()) {
+        if self.is_open
+            && (!self.ldgt_ptr.is_null() || !self.hwinfo_ptr.is_null() || !self.aida_ptr.is_null())
+        {
             return true;
         }
 
         self.close();
 
-        // 1. Primary: Segotep LDGT / HWiNFO shared memory (2MB double-buffer)
+        // 1. Primary: Segotep LDGT shared memory (2MB double-buffer)
         let ldgt_name = b"shareMemory_LDGTInfo\0";
         let ldgt_handle = unsafe {
             CreateFileMappingA(
@@ -92,11 +104,35 @@ impl WindowsSharedMemoryReader {
                 self.ldgt_handle = ldgt_handle;
                 self.ldgt_ptr = map_ptr.Value.cast::<u8>();
                 self.is_open = true;
-                info!("Initialized 2MB Windows LDGT/HWiNFO shared memory sensor bank");
+                info!("Initialized 2MB Windows LDGT shared memory sensor bank");
             }
         }
 
-        // 2. Secondary: AIDA64 / HWiNFO / LibreHardwareMonitor XML memory bank
+        // 2. Official HWiNFO64 Standalone Shared Memory: Global\HWiNFO_SENS_SM2
+        let hwinfo_shm_name = b"Global\\HWiNFO_SENS_SM2\0";
+        let hwinfo_handle = unsafe { OpenFileMappingA(FILE_MAP_READ, 0, hwinfo_shm_name.as_ptr()) };
+        if !hwinfo_handle.is_null() {
+            let map_ptr = unsafe { MapViewOfFile(hwinfo_handle, FILE_MAP_READ, 0, 0, 0) };
+            if map_ptr.Value.is_null() {
+                unsafe { CloseHandle(hwinfo_handle) };
+            } else {
+                self.hwinfo_handle = hwinfo_handle;
+                self.hwinfo_ptr = map_ptr.Value.cast::<u8>();
+                let mutex_name_w: [u16; 24] = [
+                    0x0047, 0x006C, 0x006F, 0x0062, 0x0061, 0x006C, 0x005C, 0x0048, 0x0057, 0x0069,
+                    0x004E, 0x0046, 0x004F, 0x005F, 0x0053, 0x004D, 0x0032, 0x005F, 0x004D, 0x0055,
+                    0x0054, 0x0045, 0x0058, 0x0000,
+                ]; // "Global\HWiNFO_SM2_MUTEX\0"
+                self.hwinfo_mutex =
+                    unsafe { OpenMutexW(SYNCHRONIZATION_SYNCHRONIZE, 0, mutex_name_w.as_ptr()) };
+                self.is_open = true;
+                info!(
+                    "Successfully connected to official standalone HWiNFO64 shared memory stream (Global\\HWiNFO_SENS_SM2)"
+                );
+            }
+        }
+
+        // 3. AIDA64 / LibreHardwareMonitor XML memory bank
         let aida_name = b"AIDA64_SensorValues\0";
         let aida_handle = unsafe { OpenFileMappingA(FILE_MAP_READ, 0, aida_name.as_ptr()) };
         if !aida_handle.is_null() {
@@ -107,7 +143,7 @@ impl WindowsSharedMemoryReader {
                 self.aida_handle = aida_handle;
                 self.aida_ptr = aida_map.Value.cast::<u8>();
                 self.is_open = true;
-                info!("Attached to AIDA64/HWiNFO sensor stream");
+                info!("Attached to AIDA64 sensor stream");
             }
         }
 
@@ -141,7 +177,30 @@ impl WindowsSharedMemoryReader {
             parse_ldgt_json_telemetry(&text)
         };
 
-        // If LDGT is missing any values, supplement from AIDA64/LibreHardwareMonitor XML
+        // 2. Try standalone HWiNFO64 v2 binary memory bank if values are missing
+        if (values.cpu_temp.is_none() || values.cpu_power.is_none()) && !self.hwinfo_ptr.is_null() {
+            let hw_vals = self.sample_hwinfo64_binary();
+            if values.cpu_temp.is_none() {
+                values.cpu_temp = hw_vals.cpu_temp;
+            }
+            if values.cpu_power.is_none() {
+                values.cpu_power = hw_vals.cpu_power;
+            }
+            if values.cpu_clock.is_none() {
+                values.cpu_clock = hw_vals.cpu_clock;
+            }
+            if values.gpu_temp.is_none() {
+                values.gpu_temp = hw_vals.gpu_temp;
+            }
+            if values.gpu_power.is_none() {
+                values.gpu_power = hw_vals.gpu_power;
+            }
+            if values.gpu_clock.is_none() {
+                values.gpu_clock = hw_vals.gpu_clock;
+            }
+        }
+
+        // 3. Try AIDA64 XML memory bank if still missing
         if (values.cpu_temp.is_none() || values.cpu_power.is_none()) && !self.aida_ptr.is_null() {
             let slice = unsafe { std::slice::from_raw_parts(self.aida_ptr, 262_144) };
             let text = String::from_utf8_lossy(slice);
@@ -171,6 +230,107 @@ impl WindowsSharedMemoryReader {
         values
     }
 
+    #[allow(
+        clippy::indexing_slicing,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::as_conversions,
+        clippy::similar_names
+    )]
+    fn sample_hwinfo64_binary(&self) -> WindowsSensorValues {
+        if self.hwinfo_ptr.is_null() {
+            return WindowsSensorValues::default();
+        }
+
+        if !self.hwinfo_mutex.is_null() {
+            let wait_res = unsafe { WaitForSingleObject(self.hwinfo_mutex, 50) };
+            if wait_res != 0 {
+                return WindowsSensorValues::default();
+            }
+        }
+
+        let mut values = WindowsSensorValues::default();
+        unsafe {
+            let header = std::ptr::read_unaligned(self.hwinfo_ptr.cast::<HwInfoSharedMem2>());
+            // 0x5369_5748 = "HWiS"
+            if header.dw_signature == 0x5369_5748 && header.dw_num_reading_elements > 0 {
+                let reading_elem_size = header.dw_size_of_reading_element as usize;
+                let reading_offset = header.dw_offset_of_reading_section as usize;
+
+                for i in 0..header.dw_num_reading_elements {
+                    let offset = reading_offset
+                        .saturating_add((i as usize).saturating_mul(reading_elem_size));
+                    let ptr = self.hwinfo_ptr.add(offset).cast::<HwInfoReadingElement>();
+                    let reading = std::ptr::read_unaligned(ptr);
+
+                    let label = CStr::from_bytes_until_nul(&reading.sz_label_user)
+                        .map(|s| s.to_string_lossy())
+                        .unwrap_or_default()
+                        .to_lowercase();
+
+                    let val = reading.value;
+
+                    // Sensor Type 1 = Temp, Type 5 = Power, Type 6 = Clock
+                    if reading.t_reading == 1 {
+                        if (label.contains("tctl")
+                            || label.contains("tdie")
+                            || label.contains("cpu package")
+                            || label.contains("core temp"))
+                            && (label.contains("temperature")
+                                || label.contains("temp")
+                                || label.contains("cpu"))
+                        {
+                            let current = values.cpu_temp.unwrap_or(0);
+                            let val_u8 = (val.round().clamp(0.0, 255.0)) as u8;
+                            if val_u8 > current {
+                                values.cpu_temp = Some(val_u8);
+                            }
+                        } else if label.contains("gpu")
+                            && (label.contains("temperature") || label.contains("temp"))
+                        {
+                            values.gpu_temp = Some((val.round().clamp(0.0, 255.0)) as u8);
+                        }
+                    } else if reading.t_reading == 5 {
+                        if (label.contains("cpu package power")
+                            || label.contains("package power")
+                            || label.contains("core power")
+                            || label.contains("cpu power"))
+                            && label.contains("power")
+                        {
+                            let current = values.cpu_power.unwrap_or(0);
+                            let val_u16 = (val.round().clamp(0.0, 65535.0)) as u16;
+                            if val_u16 > current {
+                                values.cpu_power = Some(val_u16);
+                            }
+                        } else if label.contains("gpu") && label.contains("power") {
+                            values.gpu_power = Some((val.round().clamp(0.0, 65535.0)) as u16);
+                        }
+                    } else if reading.t_reading == 6 {
+                        if (label.contains("core clock")
+                            || label.contains("perf")
+                            || label.contains("cpu clock"))
+                            && val >= 100.0
+                        {
+                            let current = values.cpu_clock.unwrap_or(0);
+                            let val_u16 = (val.round().clamp(0.0, 65535.0)) as u16;
+                            if val_u16 > current {
+                                values.cpu_clock = Some(val_u16);
+                            }
+                        } else if label.contains("gpu") && label.contains("clock") {
+                            values.gpu_clock = Some((val.round().clamp(0.0, 65535.0)) as u16);
+                        }
+                    }
+                }
+            }
+        }
+
+        if !self.hwinfo_mutex.is_null() {
+            unsafe { ReleaseMutex(self.hwinfo_mutex) };
+        }
+
+        values
+    }
+
     pub fn close(&mut self) {
         if !self.ldgt_ptr.is_null() {
             unsafe {
@@ -187,6 +347,29 @@ impl WindowsSharedMemoryReader {
                 let _ = CloseHandle(self.ldgt_handle);
             }
             self.ldgt_handle = std::ptr::null_mut();
+        }
+
+        if !self.hwinfo_ptr.is_null() {
+            unsafe {
+                let _ = UnmapViewOfFile(
+                    windows_sys::Win32::System::Memory::MEMORY_MAPPED_VIEW_ADDRESS {
+                        Value: self.hwinfo_ptr.cast_mut().cast::<c_void>(),
+                    },
+                );
+            }
+            self.hwinfo_ptr = null();
+        }
+        if !self.hwinfo_handle.is_null() {
+            unsafe {
+                let _ = CloseHandle(self.hwinfo_handle);
+            }
+            self.hwinfo_handle = std::ptr::null_mut();
+        }
+        if !self.hwinfo_mutex.is_null() {
+            unsafe {
+                let _ = CloseHandle(self.hwinfo_mutex);
+            }
+            self.hwinfo_mutex = std::ptr::null_mut();
         }
 
         if !self.aida_ptr.is_null() {
@@ -208,6 +391,37 @@ impl WindowsSharedMemoryReader {
 
         self.is_open = false;
     }
+}
+
+#[repr(C, packed)]
+#[derive(Debug, Copy, Clone)]
+struct HwInfoSharedMem2 {
+    dw_signature: u32,
+    dw_version: u32,
+    dw_revision: u32,
+    poll_time: i64,
+    dw_offset_of_sensor_section: u32,
+    dw_size_of_sensor_element: u32,
+    dw_num_sensor_elements: u32,
+    dw_offset_of_reading_section: u32,
+    dw_size_of_reading_element: u32,
+    dw_num_reading_elements: u32,
+    dw_polling_period: u32,
+}
+
+#[repr(C, packed)]
+#[derive(Copy, Clone)]
+struct HwInfoReadingElement {
+    t_reading: u32,
+    dw_sensor_index: u32,
+    dw_reading_id: u32,
+    sz_label_orig: [u8; 128],
+    sz_label_user: [u8; 128],
+    sz_unit: [u8; 16],
+    value: f64,
+    value_min: f64,
+    value_max: f64,
+    value_avg: f64,
 }
 
 #[cfg(target_os = "windows")]
