@@ -4,6 +4,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
+use segotep_digital::protocol::DEFAULT_FALLBACK_MODEL_ID;
 use segotep_digital::{PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID};
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -13,14 +14,14 @@ use tracing_subscriber::EnvFilter;
     name = "segotep-digital",
     author,
     version,
-    about = "Linux driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
+    about = "Cross-platform driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
 )]
 struct Args {
     /// Update interval in milliseconds
     #[arg(short, long, default_value_t = 1000)]
     interval_ms: u64,
 
-    /// Override device model ID (auto-detected from hardware by default)
+    /// Override device model ID (e.g. 1 for Digital standard, 3 for Ice Moon)
     #[arg(short, long)]
     model_id: Option<u8>,
 
@@ -54,19 +55,19 @@ fn initialize_device_connection(
     dev: &mut SegotepDevice,
     override_id: Option<u8>,
     fahrenheit: bool,
-) -> Option<u8> {
-    let mut resolved_id = override_id;
+) -> u8 {
+    let mut resolved_id = override_id.unwrap_or(DEFAULT_FALLBACK_MODEL_ID);
 
     match dev.read_info(500) {
         Ok(Some(info)) => {
             if let Some(id) = override_id {
-                resolved_id = Some(id);
+                resolved_id = id;
                 info!(
                     "Device connected -> Auto-detected Model ID: {}, using manual override: {id}",
                     info.model_id
                 );
             } else if info.model_id > 0 {
-                resolved_id = Some(info.model_id);
+                resolved_id = info.model_id;
                 info!(
                     "Device connected -> Auto-detected hardware Model ID: {} (CapMask: 0x{:02x}, Fahrenheit: {})",
                     info.model_id, info.capability_mask, info.is_fahrenheit_capable
@@ -80,15 +81,7 @@ fn initialize_device_connection(
             }
         }
         Ok(None) => {
-            if let Some(id) = resolved_id {
-                info!(
-                    "Device connected -> No input report received within timeout, using configured Model ID: {id}"
-                );
-            } else {
-                warn!(
-                    "Device connected -> No input report received and no Model ID specified; using default 0"
-                );
-            }
+            info!("Device connected -> Using Model ID: {resolved_id}");
         }
         Err(e) => {
             debug!("Device report query notice: {e}");
@@ -116,7 +109,7 @@ fn main() {
         .as_deref()
         .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
-    info!("Starting Segotep Digital Linux Driver");
+    info!("Starting Segotep Digital Driver");
     info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
     info!(
         "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
@@ -145,7 +138,7 @@ fn main() {
     let mut telemetry = SystemTelemetry::new();
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
     let mut initial_connection = true;
-    let mut active_model_id = args.model_id.unwrap_or(0);
+    let mut active_model_id = args.model_id.unwrap_or(DEFAULT_FALLBACK_MODEL_ID);
 
     while running.load(Ordering::Relaxed) {
         if dev.connect().is_err() {
@@ -158,10 +151,8 @@ fn main() {
         }
 
         if initial_connection {
-            if let Some(id) = initialize_device_connection(&mut dev, args.model_id, args.fahrenheit)
-            {
-                active_model_id = id;
-            }
+            active_model_id =
+                initialize_device_connection(&mut dev, args.model_id, args.fahrenheit);
             initial_connection = false;
         }
 
@@ -169,8 +160,12 @@ fn main() {
 
         if args.verbose {
             info!(
-                "Telemetry -> CPU: {}°C, {}%, {}W, {}MHz",
-                metrics.cpu_temp, metrics.cpu_load, metrics.cpu_power_watts, metrics.cpu_clock_mhz
+                "Telemetry -> CPU: {}°C, {}%, {}W, {}MHz (Model: {})",
+                metrics.cpu_temp,
+                metrics.cpu_load,
+                metrics.cpu_power_watts,
+                metrics.cpu_clock_mhz,
+                active_model_id
             );
         }
 
