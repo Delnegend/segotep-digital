@@ -3,8 +3,8 @@
 pub const VENDOR_ID: u16 = 0x1A86;
 pub const PRODUCT_ID: u16 = 0xA001;
 
-/// Default model ID when hardware auto-detection does not return a report (1 for standard / 3 for Ice Moon)
-pub const DEFAULT_FALLBACK_MODEL_ID: u8 = 1;
+/// Default model ID (3 for Ice Moon / 1 for standard digital)
+pub const DEFAULT_FALLBACK_MODEL_ID: u8 = 3;
 
 /// Magic header bytes sent at byte index 1 and 2.
 pub const MAGIC_HEADER: [u8; 2] = [0xDC, 0xDD];
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(bytes[1], 0xDC);
         assert_eq!(bytes[2], 0xDD);
         assert_eq!(bytes[3], 0x00); // Screen ON
-        assert_eq!(bytes[4], 1); // Default fallback model_id
+        assert_eq!(bytes[4], 3); // Default fallback model_id
         assert_eq!(bytes[13], 0x01);
         assert_eq!(bytes[17], 0x0C);
         assert_eq!(bytes[33], 0); // Celsius
