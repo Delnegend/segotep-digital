@@ -1,0 +1,151 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Release version (e.g. 0.1.0)
+        required: true
+        type: string
+        default: 0.1.0
+      create_release:
+        description: Push to GitHub Releases
+        required: true
+        type: boolean
+        default: false
+
+env:
+  BINARY_NAME: segotep-digital-rs
+  VERSION: ${{ inputs.release_version }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: amd64
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install system dependencies (Host)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq pkg-config libusb-1.0-0-dev libudev-dev
+
+      - name: Install cross-compilation tools (if aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build Binary
+        run: |
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package Release Bundle
+        run: |
+          base="${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}"
+          mkdir -p "$base"
+          cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" "$base/"
+          cp udev/99-segotep.rules "$base/"
+          cp systemd/segotep-digital.service "$base/"
+          cp README.md "$base/"
+          tar -cJf "${base}.tar.xz" "$base"
+          rm -rf "$base"
+          ls -lh "${base}."*
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
+          path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.xz
+
+  release:
+    name: Release
+    needs: build
+    if: inputs.create_release == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes from commits since last tag
+        id: notes
+        run: |
+          PREV="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..HEAD"
+            COMPARE="https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...v${VERSION}"
+          else
+            RANGE="$(git rev-list --max-parents=0 HEAD 2>/dev/null | tail -1)..HEAD"
+            COMPARE=""
+          fi
+          echo "Generating notes for range $RANGE"
+          TMP="$(mktemp -d)"
+          git log --pretty=format:"%s" "$RANGE" > "$TMP/all"
+          {
+            echo "## What's Changed"
+            echo
+            for spec in "feat **Features**" "fix **Bug Fixes**" "docs **Documentation**" "ci **CI & Workflows**" "test **Tests**" "refactor **Refactoring**" "perf **Performance**" "chore **Chores**"; do
+              type="${spec%% *}"
+              grep -E "^${type}(\([^)]*\))?: " "$TMP/all" > "$TMP/items" || continue
+              echo "${spec#* }"
+              sed -E "s/^${type}(\([^)]*\))?: +/  - /" "$TMP/items"
+              echo
+            done
+            grep -Ev "^[a-z]+(\([^)]*\))?: " "$TMP/all" > "$TMP/other" || true
+            if [ -s "$TMP/other" ]; then
+              echo "**Other Changes**"
+              sed 's/^/  - /' "$TMP/other"
+              echo
+            fi
+            echo "**Installation**"
+            echo "1. Extract the tarball: \`tar -xJf segotep-digital-rs-v${VERSION}-linux-amd64.tar.xz\`"
+            echo "2. Copy binary: \`sudo cp segotep-digital-rs /usr/local/bin/\`"
+            echo "3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`"
+            echo "4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`"
+            if [ -n "$COMPARE" ]; then
+              echo
+              echo "**Full Changelog**: $COMPARE"
+            fi
+          } > notes.md
+          echo "=== draft release notes ==="
+          cat notes.md
+          echo "notes=$PWD/notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.release_version }}
+          name: v${{ inputs.release_version }}
+          body_path: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/**/*.tar.xz
