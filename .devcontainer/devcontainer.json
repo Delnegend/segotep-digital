@@ -1,0 +1,28 @@
+{
+	"$schema": "https://github.com/devcontainers/spec/raw/refs/heads/main/schemas/devContainer.base.schema.json",
+	"name": "segotep-digital-rs",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"remoteUser": "segotep",
+	"runArgs": [
+		"--hostname", "segotep-dev",
+		"--privileged",
+		"-v", "/dev:/dev"
+	],
+	"postCreateCommand": "bash .devcontainer/postinstall.sh",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"rust-lang.rust-analyzer"
+			],
+			"settings": {
+				"[rust]": {
+					"editor.defaultFormatter": "rust-lang.rust-analyzer"
+				},
+				"editor.formatOnSave": true,
+				"rust-analyzer.check.command": "clippy"
+			}
+		}
+	}
+}
