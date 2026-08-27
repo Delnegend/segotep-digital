@@ -3,7 +3,7 @@ name = "segotep-digital"
 version = "0.1.0"
 edition = "2024"
 authors = ["Delnegend <kiennguyen19323@gmail.com>"]
-description = "Linux driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
+description = "Cross-platform driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
@@ -13,6 +13,12 @@ clap = { version = "4.5.31", features = ["derive"] }
 log = "0.4.34"
 env_logger = "0.11.11"
 ctrlc = "3.5.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_System_Threading",
+    "Win32_Foundation",
+] }
 
 [lints.clippy]
 # UM, ACTUALLY

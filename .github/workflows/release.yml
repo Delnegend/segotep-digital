@@ -19,8 +19,8 @@ env:
   VERSION: ${{ inputs.release_version }}
 
 jobs:
-  build:
-    name: Build (${{ matrix.target }})
+  build-linux:
+    name: Build Linux (${{ matrix.target }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -78,9 +78,52 @@ jobs:
           name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
           path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.xz
 
+  build-windows:
+    name: Build Windows (${{ matrix.target }})
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build Binary
+        env:
+          CARGO_PKG_VERSION: ${{ inputs.release_version }}
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Release Bundle (ZIP)
+        shell: pwsh
+        run: |
+          $base = "${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Path $base -Force
+          Copy-Item "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" -Destination "$base/"
+          Copy-Item "README.md" -Destination "$base/"
+          Copy-Item "LICENSE-MIT" -Destination "$base/"
+          Copy-Item "LICENSE-APACHE" -Destination "$base/"
+          Compress-Archive -Path "$base/*" -DestinationPath "${base}.zip"
+          Remove-Item -Recurse -Force $base
+          Get-ChildItem "${base}.zip"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}
+          path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}.zip
+
   release:
     name: Release
-    needs: build
+    needs: [build-linux, build-windows]
     if: inputs.create_release == true
     runs-on: ubuntu-latest
     permissions:
@@ -122,11 +165,15 @@ jobs:
               sed 's/^/  - /' "$TMP/other"
               echo
             fi
-            echo "**Installation**"
+            echo "**Linux Installation**"
             echo "1. Extract the tarball: \`tar -xJf segotep-digital-v${VERSION}-linux-amd64.tar.xz\`"
             echo "2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`"
             echo "3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`"
             echo "4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`"
+            echo
+            echo "**Windows Installation**"
+            echo "1. Extract the zip archive: \`segotep-digital-v${VERSION}-windows-x64.zip\`"
+            echo "2. Run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task."
             if [ -n "$COMPARE" ]; then
               echo
               echo "**Full Changelog**: $COMPARE"
@@ -151,3 +198,4 @@ jobs:
           prerelease: false
           files: |
             artifacts/**/*.tar.xz
+            artifacts/**/*.zip

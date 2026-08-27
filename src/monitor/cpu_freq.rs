@@ -1,5 +1,6 @@
-//! CPU Frequency monitor in MHz.
+//! CPU Frequency monitor in MHz for Linux and Windows.
 
+#[cfg(target_os = "linux")]
 use std::fs;
 use sysinfo::System;
 
@@ -28,15 +29,18 @@ impl CpuFreqMonitor {
         clippy::arithmetic_side_effects
     )]
     pub fn get_freq_mhz(&mut self) -> u16 {
-        // Direct read from Linux cpufreq if available (scaling_cur_freq is in kHz)
-        if let Ok(content) =
-            fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
-            && let Ok(khz) = content.trim().parse::<u32>()
+        #[cfg(target_os = "linux")]
         {
-            return (khz / 1000).clamp(0, 65535) as u16;
+            // Direct read from Linux cpufreq if available (scaling_cur_freq is in kHz)
+            if let Ok(content) =
+                fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+                && let Ok(khz) = content.trim().parse::<u32>()
+            {
+                return (khz / 1000).clamp(0, 65535) as u16;
+            }
         }
 
-        // Fallback to sysinfo
+        // Cross-platform fallback via sysinfo (works on Windows & Linux)
         self.sys.refresh_cpu_frequency();
         let cpus = self.sys.cpus();
         if !cpus.is_empty() {

@@ -1,11 +1,15 @@
-//! Linux CPU temperature monitor using /sys/class/hwmon and sysinfo fallback.
+//! CPU temperature monitor for Linux and Windows using hardware sensors and sysinfo fallback.
 
+#[cfg(target_os = "linux")]
 use log::debug;
+#[cfg(target_os = "linux")]
 use std::fs;
+#[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 use sysinfo::Components;
 
 pub struct CpuTempMonitor {
+    #[cfg(target_os = "linux")]
     direct_sensor_path: Option<PathBuf>,
     components: Components,
 }
@@ -19,11 +23,13 @@ impl Default for CpuTempMonitor {
 impl CpuTempMonitor {
     #[must_use]
     pub fn new() -> Self {
+        #[cfg(target_os = "linux")]
         let direct_sensor_path = find_hwmon_cpu_temp();
         let mut components = Components::new();
         components.refresh(true);
 
         Self {
+            #[cfg(target_os = "linux")]
             direct_sensor_path,
             components,
         }
@@ -37,16 +43,19 @@ impl CpuTempMonitor {
         clippy::arithmetic_side_effects
     )]
     pub fn get_temp(&mut self) -> u8 {
-        // Method 1: Direct sysfs hwmon read (fastest, zero overhead)
-        if let Some(ref path) = self.direct_sensor_path
-            && let Ok(content) = fs::read_to_string(path)
-            && let Ok(milli_c) = content.trim().parse::<i32>()
+        #[cfg(target_os = "linux")]
         {
-            let temp = (milli_c / 1000).clamp(0, 255) as u8;
-            return temp;
+            // Method 1 (Linux): Direct sysfs hwmon read (fastest, zero overhead)
+            if let Some(ref path) = self.direct_sensor_path
+                && let Ok(content) = fs::read_to_string(path)
+                && let Ok(milli_c) = content.trim().parse::<i32>()
+            {
+                let temp = (milli_c / 1000).clamp(0, 255) as u8;
+                return temp;
+            }
         }
 
-        // Method 2: Fallback to sysinfo components
+        // Method 2 (Cross-Platform): sysinfo hardware components
         self.components.refresh(false);
         let mut best_temp: f32 = 0.0;
 
@@ -56,7 +65,9 @@ impl CpuTempMonitor {
                 || label.contains("tctl")
                 || label.contains("tdie")
                 || label.contains("package")
-                || label.contains("core");
+                || label.contains("core")
+                || label.contains("thermal")
+                || label.contains("tz");
 
             if is_cpu
                 && let Some(temp) = component.temperature()
@@ -75,6 +86,7 @@ impl CpuTempMonitor {
 }
 
 /// Searches `/sys/class/hwmon/` for known CPU temperature sensor nodes.
+#[cfg(target_os = "linux")]
 #[allow(clippy::indexing_slicing)]
 fn find_hwmon_cpu_temp() -> Option<PathBuf> {
     let hwmon_dir = Path::new("/sys/class/hwmon");
