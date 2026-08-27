@@ -44,7 +44,27 @@ On Windows, reading ring-0 hardware sensors (like CPU core temperatures and pack
 
 ## Installation
 
-### Method 1: Pre-built Binary Releases (Recommended)
+### Method 1: Homebrew (Linux)
+
+You can install `segotep-digital` on Linux using [Homebrew](https://brew.sh/) through the official tap:
+
+```bash
+# Add the tap and install
+brew tap Delnegend/tap
+brew install segotep-digital
+
+# Install udev rule and start background systemd service
+sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/99-segotep.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/segotep-digital.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now segotep-digital.service
+```
+
+---
+
+### Method 2: Pre-built Binary Releases
 
 #### Linux
 
@@ -86,7 +106,7 @@ On Windows, reading ring-0 hardware sensors (like CPU core temperatures and pack
 
 ---
 
-### Method 2: Build from Source
+### Method 3: Build from Source
 
 #### Prerequisites
 
