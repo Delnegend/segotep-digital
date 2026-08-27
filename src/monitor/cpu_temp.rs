@@ -1,12 +1,12 @@
 //! CPU temperature monitor for Linux and Windows using hardware sensors and sysinfo fallback.
 
 #[cfg(target_os = "linux")]
-use log::debug;
-#[cfg(target_os = "linux")]
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 use sysinfo::Components;
+#[cfg(target_os = "linux")]
+use tracing::debug;
 
 pub struct CpuTempMonitor {
     #[cfg(target_os = "linux")]

@@ -1,13 +1,13 @@
 //! CPU package power monitor for Linux and Windows.
 
 #[cfg(target_os = "linux")]
-use log::debug;
-#[cfg(target_os = "linux")]
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::time::Instant;
+#[cfg(target_os = "linux")]
+use tracing::debug;
 
 pub struct CpuPowerMonitor {
     #[cfg(target_os = "linux")]

@@ -6,7 +6,7 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use hidapi::{HidApi, HidDevice};
-use log::{debug, error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::protocol::{PRODUCT_ID, SegotepPacket, VENDOR_ID};
 

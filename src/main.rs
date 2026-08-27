@@ -4,10 +4,11 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
-use log::{debug, error, info, warn};
 use segotep_digital::{
     DEFAULT_MODEL_ID_ICE_MOON, PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID,
 };
+use tracing::{debug, error, info, warn};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -96,7 +97,11 @@ fn initialize_device_connection(
 }
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let args = Args::parse();
 
