@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 # Winget package manifest for segotep-digital.
 # Submit these three files to https://github.com/microsoft/winget-pkgs under
 #   manifests/d/Delnegend/SegotepDigital/<version>/
@@ -13,8 +14,7 @@ InstallModes:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64.msi
-    # TODO: replace with the SHA256 printed by the release workflow
-    InstallerSha256: CHANGE_ME
+    InstallerSha256: FA4884ADE5586189718A92C8A9A75420D2FCDDCF3409A0FC5D2B1114661413D2
     ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
 AppsAndFeaturesEntries:
   - DisplayName: Segotep Digital
