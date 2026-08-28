@@ -21,13 +21,13 @@
                   Execute="deferred"
                   Impersonate="no"
                   Return="check"
-                  FileKey="SegotepDigitalExe"
+                  FileRef="SegotepDigitalExe"
                   ExeCommand="--install-service" />
     <CustomAction Id="UnregisterService"
                   Execute="deferred"
                   Impersonate="no"
                   Return="check"
-                  FileKey="SegotepDigitalExe"
+                  FileRef="SegotepDigitalExe"
                   ExeCommand="--uninstall-service" />
 
     <InstallExecuteSequence>
