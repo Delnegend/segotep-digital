@@ -1,10 +1,16 @@
 name: Submit to WinGet
 
 # Opens a manifest PR against microsoft/winget-pkgs whenever a release is
-# published. Requires the WINGET_TOKEN secret: a GitHub PAT (repo scope) whose
-# account owns a fork of microsoft/winget-pkgs (created automatically).
+# published. Requires the WINGET_TOKEN secret, a PAT from the account that owns
+# the winget-pkgs fork (created automatically):
 #
 #   gh secret set WINGET_TOKEN
+#
+# Either a classic PAT with the `repo` scope, or a fine-grained PAT with:
+#   - Repository access: All repositories   (required: the fork is created at
+#     runtime and would not be in an "Only select repositories" list)
+#   - Contents: Read and write
+#   - Pull requests: Read and write
 #
 # The workflow downloads the released MSI, computes its SHA256, patches
 # winget/Delnegend.SegotepDigital/<version>/...installer.yaml, then forks
