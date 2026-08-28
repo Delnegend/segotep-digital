@@ -221,4 +221,12 @@ jobs:
           files: |
             artifacts/**/*.tar.xz
             artifacts/**/*.zip
-            artifacts/**/*.exe
+            artifacts/**/*.msi
+
+      - name: Trigger winget submission
+        # Releases created with GITHUB_TOKEN do not fire the `release: published`
+        # event, so dispatch the winget-submit workflow explicitly.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run "Submit to WinGet" -f version="${{ inputs.release_version }}"
