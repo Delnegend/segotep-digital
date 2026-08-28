@@ -9,104 +9,120 @@ Cross-platform driver and background service for Segotep Ice Moon / Digital seri
 
 ## Features
 
-- **Cross-Platform Telemetry**:
-  - **Linux**: Direct zero-overhead hardware monitoring via `sysfs` (`/sys/class/hwmon`), Intel/AMD RAPL energy counters (`/sys/class/powercap`), `/proc/stat`, and `cpufreq`.
-  - **Windows**: Multi-tier telemetry engine supporting Segotep LDGT helper, official standalone HWiNFO64 shared memory (`Global\HWiNFO_SENS_SM2`), AIDA64 / LibreHardwareMonitor XML shared memory (`AIDA64_SensorValues`), and native fallback via Win32 / `sysinfo`.
-- **Reverse-Engineered 34-Byte HID Protocol**: Sends exact packet structures matching official Chinese vendor hardware revisions (Model 1 Standard, Model 3 Ice Moon 360).
-- **Robust USB HID Reconnection**: Automatically detects cooler disconnections/sleep cycles and seamlessly reconnects without crashing.
-- **Lightweight Background Daemon**: Zero bloat, consuming negligible CPU and < 10MB of RAM.
-- **Customizable**: Configurable refresh intervals, Fahrenheit display mode, screen power toggle, and custom VID/PID.
+- **100% Open-Source & Bloat-Free**: Completely replaces closed-source first-party vendor utilities with a lightweight, secure Rust daemon consuming negligible CPU and < 10MB of RAM.
+- **Cross-Platform Telemetry Engine**:
+  - **Linux**: Zero-overhead hardware monitoring via direct kernel `sysfs` (`/sys/class/hwmon`), Intel/AMD RAPL energy counters (`/sys/class/powercap`), `/proc/stat`, and `cpufreq`.
+  - **Windows**: High-precision native telemetry via Windows Performance Counters (PDH) for live CPU Package Power (Watts), dynamic boost clock frequency (MHz), and CPU % load; native NVIDIA NVML for GPU stats; and direct kernel CPU temperature monitoring via the signed [PawnIO](https://github.com/namazso/PawnIO) driver.
+- **Reverse-Engineered 34-Byte HID Protocol**: Sends exact packet structures matching official hardware revisions (Model 1 Standard, Model 3 Ice Moon 360).
+- **Native Background Service**: Native system service support on both platforms (`systemd` on Linux, native Windows Service Control Manager on Windows).
+- **Robust USB HID Reconnection**: Automatically detects cooler disconnections, sleep cycles, and power states, seamlessly reconnecting without crashing.
+- **Customizable**: Configurable refresh intervals, Fahrenheit display mode, screen power toggle, and custom VID/PID overrides.
 
 ---
 
-## Windows Requirements & Sensor Sources
+## Why Use This Over Official Vendor Software?
 
-On Windows, reading ring-0 hardware sensors (like CPU core temperatures and package power in Watts) requires one of the following sensor providers:
-
-### Option 1: HWiNFO64 (Recommended)
-1. Install and launch [HWiNFO64](https://www.hwinfo.com/).
-2. Open **Settings** -> **General / User Interface**.
-3. Enable **"Shared Memory Support"**.
-4. `segotep-digital` will automatically attach to `Global\HWiNFO_SENS_SM2` with mutex synchronization to fetch real-time CPU `Tctl/Tdie` temperature, package power, and clock speeds.
-
-### Option 2: Segotep Official Sensor Engine (`LDGT.exe`)
-- If the official Segotep Digital software is installed in `C:\Program Files\Segotep DigitalCAP`, `segotep-digital` will automatically start and communicate with the 2MB `shareMemory_LDGTInfo` sensor bank.
-
-### Option 3: AIDA64 / LibreHardwareMonitor
-- In AIDA64: **File** -> **Preferences** -> **Hardware Monitoring** -> **External Applications** -> Enable **"Enable shared memory"**.
-- In LibreHardwareMonitor: Enable the AIDA64 shared memory plugin.
-
-### Option 4: Pure Native User-Space (Driverless)
-- If none of the above are running, `segotep-digital` falls back to user-space Win32 APIs and `sysinfo`.
-- *Note:* User-space Windows APIs cannot query raw thermal diode temperatures without an installed kernel driver.
+| Feature | Segotep Official Software | `segotep-digital` + PawnIO |
+| :--- | :--- | :--- |
+| **Open Source** | ❌ Proprietary / Closed Source | ✅ **100% Open Source** (Rust + PawnIO) |
+| **Cross-Platform** | ❌ Windows-only GUI app | ✅ **Linux (`systemd`) & Windows (Service)** |
+| **Resource Usage** | ⚠️ GUI process (~15–25MB RAM) | ⚡ **< 10MB RAM, ~0% CPU usage** |
+| **Background Mode** | ❌ Requires tray app / open console | ✅ **Runs silently as a native OS service** |
 
 ---
 
-## Installation
+## Windows Requirements: CPU Temperature & PawnIO
 
-### Method 1: Homebrew (Linux)
+On Windows, desktop motherboard BIOSes (ASUS, MSI, ASRock, Gigabyte) do not route CPU thermal diode temperatures through ACPI. Querying CPU Digital Thermal Sensors (DTS) on AMD Ryzen (SMN bus) and Intel Core (MSRs) requires Ring 0 kernel execution.
 
-You can install `segotep-digital` on Linux using [Homebrew](https://brew.sh/) through the official tap:
+To maintain a **fully open-source stack** while remaining compatible with Windows HVCI / Core Isolation (Memory Integrity), `segotep-digital` utilizes **[PawnIO](https://pawnio.eu/)**—a modern, signed, open-source driver ecosystem.
+
+### One-Time Driver Setup (Recommended via `winget`)
+
+Install the official signed PawnIO driver via Windows Package Manager:
+
+```powershell
+winget install -e --id namazso.PawnIO
+```
+
+> **Why PawnIO?**
+> Unlike vulnerable legacy kernel drivers (e.g. WinRing0) blocked by Microsoft Defender, PawnIO executes sandboxed bytecode in kernel space with strict access controls, providing safe, WHQL-compatible hardware access for open-source tools.
+
+---
+
+## Installation & Setup
+
+### Windows
+
+#### 1. Install as a Background Service (Recommended)
+
+1. Download `segotep-digital-v0.1.0-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it.
+2. Open an elevated PowerShell (Run as Administrator) and install the background service:
+   ```powershell
+   sudo .\segotep-digital.exe --install-service -m 3 -i 1000
+   ```
+   *The service will start immediately and automatically boot with Windows.*
+
+3. To stop and uninstall the service at any time:
+   ```powershell
+   sudo .\segotep-digital.exe --uninstall-service
+   ```
+
+#### 2. Run Interactively in Console
+
+```powershell
+# Verbose live telemetry monitoring
+sudo .\segotep-digital.exe -v -m 3
+```
+
+---
+
+### Linux
+
+#### Method 1: Homebrew (Linux)
 
 ```bash
-# Add the tap and install
+# Add tap and install
 brew tap Delnegend/tap
 brew install segotep-digital
 
-# Install udev rule and start background systemd service
+# Install udev rules for non-root USB access
 sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/99-segotep.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 
+# Enable and start background systemd service
 sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/segotep-digital.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now segotep-digital.service
 ```
 
----
+#### Method 2: Pre-built Binary Releases
 
-### Method 2: Pre-built Binary Releases
-
-#### Linux
-
-1. Download the latest tarball for your architecture from [Releases](https://github.com/Delnegend/segotep-digital/releases):
+1. Download the latest tarball from [Releases](https://github.com/Delnegend/segotep-digital/releases):
    ```bash
    tar -xJf segotep-digital-v0.1.0-linux-amd64.tar.xz
    cd segotep-digital-v0.1.0-linux-amd64
    ```
 
-2. Copy the binary to `/usr/local/bin`:
+2. Copy the binary and set permissions:
    ```bash
    sudo cp segotep-digital /usr/local/bin/
    sudo chmod +x /usr/local/bin/segotep-digital
    ```
 
-3. Install the udev rule to allow non-root USB communication:
+3. Install udev rule and start the systemd service:
    ```bash
    sudo cp udev/99-segotep.rules /etc/udev/rules.d/
    sudo udevadm control --reload-rules && sudo udevadm trigger
-   ```
 
-4. Enable and start the systemd service:
-   ```bash
    sudo cp systemd/segotep-digital.service /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl enable --now segotep-digital.service
    ```
 
-#### Windows
-
-1. Download the latest zip archive from [Releases](https://github.com/Delnegend/segotep-digital/releases):
-   - `segotep-digital-v0.1.0-windows-x64.zip`
-2. Extract the archive.
-3. Run `segotep-digital.exe` with administrator privileges:
-   ```powershell
-   sudo .\segotep-digital.exe -v
-   ```
-4. To run automatically on boot, add a shortcut to Windows Startup (`shell:startup`) or create a Task Scheduler task with "Run with highest privileges".
-
 ---
 
-### Method 3: Build from Source
+### Build from Source
 
 #### Prerequisites
 
@@ -123,20 +139,15 @@ sudo systemctl enable --now segotep-digital.service
 
 #### Build Instructions
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Delnegend/segotep-digital.git
-   cd segotep-digital
-   ```
+```bash
+git clone https://github.com/Delnegend/segotep-digital.git
+cd segotep-digital
+cargo build --release
+```
 
-2. Build the optimized release binary:
-   ```bash
-   cargo build --release
-   ```
-
-3. The compiled binary will be available at:
-   - **Linux**: `target/release/segotep-digital`
-   - **Windows**: `target/release/segotep-digital.exe`
+The compiled binary will be located at:
+- **Linux**: `target/release/segotep-digital`
+- **Windows**: `target/release/segotep-digital.exe`
 
 ---
 
@@ -150,14 +161,15 @@ segotep-digital [OPTIONS]
 
 | Flag / Option | Default | Description |
 | :--- | :--- | :--- |
-| `-i, --interval-ms <MS>` | `1000` | Update telemetry interval in milliseconds (min: 100ms) |
+| `-i, --interval-ms <MS>` | `1000` | Telemetry refresh interval in milliseconds (min: 100ms) |
 | `-m, --model-id <ID>` | `3` | Device model ID (`3` for Ice Moon 360 / `1` for Standard Digital) |
 | `-f, --fahrenheit` | `false` | Display temperature in Fahrenheit instead of Celsius |
-| `--screen-off` | `false` | Turn off the 7-segment display screen |
-| `-s, --source <SOURCE>` | `auto` | *(Windows only)* Sensor backend: `auto`, `ldgt`, `hwinfo`, `aida64`, `sysinfo` |
+| `--screen-off` | `false` | Turn off the 7-segment display screen and exit |
 | `--vid <HEX>` | `1a86` | Custom USB Vendor ID in hexadecimal |
 | `--pid <HEX>` | `a001` | Custom USB Product ID in hexadecimal |
 | `-v, --verbose` | `false` | Print telemetry metrics and sensor stats to stdout |
+| `--install-service` | | *(Windows only)* Install as a background Windows Service (auto-starts on boot) |
+| `--uninstall-service` | | *(Windows only)* Stop and remove the Windows Service |
 | `-h, --help` | | Print help |
 | `-V, --version` | | Print version |
 
