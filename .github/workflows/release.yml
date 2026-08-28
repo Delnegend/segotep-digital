@@ -13,15 +13,62 @@ on:
         required: true
         type: boolean
         default: false
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 env:
   BINARY_NAME: segotep-digital
-  VERSION: ${{ inputs.release_version }}
 
 jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       (contains(github.event.pull_request.labels.*.name, 'dependencies') || github.event.pull_request.head.ref == 'chore/update-deps'))
+    outputs:
+      release_version: ${{ steps.version.outputs.version }}
+      create_release: ${{ steps.version.outputs.create_release }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
+            echo "create_release=${{ inputs.create_release }}" >> "$GITHUB_OUTPUT"
+          else
+            LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
+            PLAIN_VERSION="${LATEST_TAG#v}"
+            IFS='.' read -r major minor patch <<< "$PLAIN_VERSION"
+            major="${major:-0}"
+            minor="${minor:-1}"
+            patch="${patch:-0}"
+            if [ "$LATEST_TAG" = "v0.0.0" ]; then
+              NEXT_VERSION="0.1.0"
+            else
+              NEXT_PATCH=$((patch + 1))
+              NEXT_VERSION="${major}.${minor}.${NEXT_PATCH}"
+            fi
+            echo "Latest tag: $LATEST_TAG, computed next patch version: $NEXT_VERSION"
+            echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
+            echo "create_release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-linux:
     name: Build Linux (${{ matrix.target }})
+    needs: prepare
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.release_version }}
     strategy:
       matrix:
         include:
@@ -46,7 +93,7 @@ jobs:
 
       - name: Build Binary
         env:
-          CARGO_PKG_VERSION: ${{ inputs.release_version }}
+          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.release_version }}
         run: |
           cross build --release --target ${{ matrix.target }}
 
@@ -70,7 +117,10 @@ jobs:
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
+    needs: prepare
     runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.release_version }}
     strategy:
       matrix:
         include:
@@ -88,7 +138,7 @@ jobs:
 
       - name: Build Binary
         env:
-          CARGO_PKG_VERSION: ${{ inputs.release_version }}
+          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.release_version }}
         run: |
           cargo build --release --target ${{ matrix.target }}
 
@@ -104,7 +154,7 @@ jobs:
         run: |
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
-          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ inputs.release_version }}" -o "installer\output\segotep-digital-v${{ inputs.release_version }}-windows-x64.msi"
+          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ needs.prepare.outputs.release_version }}" -o "installer\output\segotep-digital-v${{ needs.prepare.outputs.release_version }}-windows-x64.msi"
 
       - name: Compute installer SHA256
         shell: pwsh
@@ -144,11 +194,13 @@ jobs:
 
   release:
     name: Release
-    needs: [build-linux, build-windows]
-    if: inputs.create_release == true
+    needs: [prepare, build-linux, build-windows]
+    if: needs.prepare.outputs.create_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.release_version }}
 
     steps:
       - name: Checkout
@@ -213,8 +265,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ inputs.release_version }}
-          name: v${{ inputs.release_version }}
+          tag_name: v${{ needs.prepare.outputs.release_version }}
+          name: v${{ needs.prepare.outputs.release_version }}
           body_path: ${{ steps.notes.outputs.notes }}
           draft: false
           prerelease: false
@@ -229,4 +281,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run "Submit to WinGet" -f version="${{ inputs.release_version }}"
+          gh workflow run "Submit to WinGet" -f version="${{ needs.prepare.outputs.release_version }}"
