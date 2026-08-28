@@ -17,14 +17,18 @@ use tracing::{debug, info, warn};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 #[cfg(target_os = "windows")]
+use windows_sys::Win32::Security::{
+    GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation,
+};
+#[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Memory::{
     CreateFileMappingA, FILE_MAP_ALL_ACCESS, FILE_MAP_READ, MapViewOfFile, OpenFileMappingA,
     PAGE_READWRITE, UnmapViewOfFile,
 };
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, DETACHED_PROCESS, OpenMutexW, ReleaseMutex, SYNCHRONIZATION_SYNCHRONIZE,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, GetCurrentProcess, OpenMutexW, OpenProcessToken, ReleaseMutex,
+    SYNCHRONIZATION_SYNCHRONIZE, WaitForSingleObject,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -196,10 +200,8 @@ impl WindowsSharedMemoryReader {
             }
         }
 
-        if !self.tried_autostart
-            && (self.source == WindowsSensorSource::Auto
-                || self.source == WindowsSensorSource::Ldgt)
-        {
+        // Explicitly spawn LDGT helper only if the user explicitly specified `--source ldgt`
+        if !self.tried_autostart && self.source == WindowsSensorSource::Ldgt {
             self.tried_autostart = true;
             try_spawn_background_helper();
         }
@@ -497,7 +499,38 @@ impl Drop for WindowsSharedMemoryReader {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::borrow_as_ptr, clippy::cast_possible_truncation)]
+fn is_process_elevated() -> bool {
+    unsafe {
+        let mut token = std::ptr::null_mut();
+        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) == 0 {
+            return false;
+        }
+
+        let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
+        let mut ret_len = 0;
+        let success = GetTokenInformation(
+            token,
+            TokenElevation,
+            (&raw mut elevation).cast::<c_void>(),
+            size_of::<TOKEN_ELEVATION>() as u32,
+            &raw mut ret_len,
+        );
+        let _ = CloseHandle(token);
+
+        success != 0 && elevation.TokenIsElevated != 0
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn try_spawn_background_helper() {
+    if !is_process_elevated() {
+        warn!(
+            "LDGT sensor helper requires Administrator privileges to load kernel drivers; skipping auto-launch"
+        );
+        return;
+    }
+
     let search_paths = [
         Path::new("C:\\Program Files\\Segotep DigitalCAP\\LDGT.exe"),
         Path::new("C:\\Program Files (x86)\\Segotep DigitalCAP\\LDGT.exe"),
@@ -513,7 +546,7 @@ fn try_spawn_background_helper() {
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
-                .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+                .creation_flags(CREATE_NO_WINDOW)
                 .spawn();
             return;
         }
