@@ -1,0 +1,145 @@
+name: Submit to WinGet
+
+# Opens a manifest PR against microsoft/winget-pkgs whenever a release is
+# published. Requires the WINGET_TOKEN secret: a GitHub PAT (repo scope) whose
+# account owns a fork of microsoft/winget-pkgs (created automatically).
+#
+#   gh secret set WINGET_TOKEN
+#
+# The workflow downloads the released MSI, computes its SHA256, patches
+# winget/Delnegend.SegotepDigital/<version>/...installer.yaml, then forks
+# microsoft/winget-pkgs (if needed), pushes the manifests for that version and
+# opens the PR. The PR still needs human moderator approval on the winget-pkgs
+# side before it is merged.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to submit (e.g. 1.0.0), without leading 'v'"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    name: Open winget-pkgs PR
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            v="${{ github.event.release.tag_name }}"
+          else
+            v="${{ inputs.version }}"
+          fi
+          v="${v#v}"
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify WINGET_TOKEN is configured
+        shell: bash
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::The WINGET_TOKEN secret is not set. Add it with:"
+            echo "::error::  gh secret set WINGET_TOKEN"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Verify manifests exist
+        shell: bash
+        run: |
+          MANIFEST_DIR="winget/Delnegend.SegotepDigital/${{ steps.version.outputs.version }}"
+          if [[ ! -f "$MANIFEST_DIR/Delnegend.SegotepDigital.installer.yaml" ]]; then
+            echo "::error::Manifests for version ${{ steps.version.outputs.version }} not found in $MANIFEST_DIR"
+            echo "::error::Create winget/Delnegend.SegotepDigital/${{ steps.version.outputs.version }}/ before releasing."
+            exit 1
+          fi
+
+      - name: Compute installer SHA256 from release asset
+        id: hash
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          URL="https://github.com/Delnegend/segotep-digital/releases/download/v${VERSION}/segotep-digital-v${VERSION}-windows-x64.msi"
+          curl -fL --retry 3 -o installer.msi "$URL"
+          SHA="$(sha256sum installer.msi | cut -d' ' -f1)"
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "Installer SHA256: ${SHA}"
+
+      - name: Patch InstallerSha256 in the installer manifest
+        shell: bash
+        run: |
+          MANIFEST="winget/Delnegend.SegotepDigital/${{ steps.version.outputs.version }}/Delnegend.SegotepDigital.installer.yaml"
+          sed -i "s/InstallerSha256: .*/InstallerSha256: ${{ steps.hash.outputs.sha256 }}/" "$MANIFEST"
+          grep "InstallerSha256" "$MANIFEST"
+
+      - name: Clone winget-pkgs and prepare branch
+        id: prep
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git clone --depth 1 https://github.com/microsoft/winget-pkgs.git
+          if [[ -d "winget-pkgs/manifests/d/Delnegend/SegotepDigital/${VERSION}" ]]; then
+            echo "::warning::Version ${VERSION} already exists in microsoft/winget-pkgs; nothing to do."
+            echo "branch=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh repo fork microsoft/winget-pkgs --default-branch-only=false || true
+          cd winget-pkgs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "Delnegend.SegotepDigital-${VERSION}"
+          echo "branch=Delnegend.SegotepDigital-${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "fork_owner=$(gh api user --jq .login)" >> "$GITHUB_OUTPUT"
+
+      - name: Copy manifests and commit
+        if: steps.prep.outputs.branch != ''
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p "winget-pkgs/manifests/d/Delnegend/SegotepDigital/${VERSION}"
+          cp "winget/Delnegend.SegotepDigital/${VERSION}/"*.yaml "winget-pkgs/manifests/d/Delnegend/SegotepDigital/${VERSION}/"
+          cd winget-pkgs
+          git add "manifests/d/Delnegend/SegotepDigital/${VERSION}"
+          git commit -m "New version: Delnegend.SegotepDigital version ${VERSION}"
+
+      - name: Push branch and open PR
+        if: steps.prep.outputs.branch != ''
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          cd winget-pkgs
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ steps.prep.outputs.fork_owner }}/winget-pkgs.git" "HEAD:${{ steps.prep.outputs.branch }}"
+          BODY=$(cat <<EOF
+          ## Purpose
+          - New version: \`Delnegend.SegotepDigital\` version \`${VERSION}\`
+
+          ## What's Changed
+          - Adds the manifest set for version \`${VERSION}\` of \`Delnegend.SegotepDigital\` (segotep-digital: open-source driver and background service for Segotep Ice Moon / Digital series AIO coolers).
+
+          ## Validation
+          - [x] Installer SHA256 computed from the published release asset
+          - [x] Manifest validated with \`winget validate\` before the release
+          - [ ] Automated validation passed (winget-pkgs pipeline)
+          - [ ] Human moderation review passed
+
+          Release: https://github.com/Delnegend/segotep-digital/releases/tag/v${VERSION}
+          Source: https://github.com/Delnegend/segotep-digital
+          EOF
+          )
+          gh pr create --repo microsoft/winget-pkgs \
+            --base master \
+            --head "${{ steps.prep.outputs.fork_owner }}:${{ steps.prep.outputs.branch }}" \
+            --title "New version: Delnegend.SegotepDigital version ${VERSION}" \
+            --body "$BODY"

@@ -1,6 +1,6 @@
 [package]
 name = "segotep-digital"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["Delnegend <kiennguyen19323@gmail.com>"]
 description = "Cross-platform driver and service for Segotep Ice Moon / Digital series AIO CPU coolers"

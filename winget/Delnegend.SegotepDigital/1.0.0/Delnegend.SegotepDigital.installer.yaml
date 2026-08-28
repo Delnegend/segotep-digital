@@ -1,24 +1,26 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 # Winget package manifest for segotep-digital.
-# Submit these three files to https://github.com/microsoft/winget-pkgs under
-#   manifests/d/Delnegend/SegotepDigital/<version>/
-# after the release workflow has run and you have the installer SHA256
-# (printed in the "Compute installer SHA256" step of the build-windows job).
+# The InstallerSha256 below is patched automatically by the
+# .github/workflows/winget-submit.yml workflow when a release is published
+# (it computes the hash of the release MSI). For manual submissions, run the
+# release workflow first and copy the hash from the "Compute installer SHA256"
+# step of the build-windows job.
 PackageIdentifier: Delnegend.SegotepDigital
-PackageVersion: 0.1.0
+PackageVersion: 1.0.0
 InstallerType: wix
 InstallModes:
   - interactive
   - silent
   - silentWithProgress
+ElevationRequirement: elevationRequired
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64.msi
-    InstallerSha256: D589CC1CDC3BDBF80136B88BE2C0F7AC7098BFE68944E5BEE5002D7F37E7BFA8
+    InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v1.0.0/segotep-digital-v1.0.0-windows-x64.msi
+    InstallerSha256: CHANGE_ME
     ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
 AppsAndFeaturesEntries:
   - DisplayName: Segotep Digital
-    DisplayVersion: 0.1.0
+    DisplayVersion: 1.0.0
     ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
     UpgradeCode: '{312623A3-840C-48A2-BBF1-BBF28B2B98E4}'
 ManifestType: installer

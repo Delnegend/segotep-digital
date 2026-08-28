@@ -56,9 +56,11 @@ winget install -e --id namazso.PawnIO
 
 #### 1. Install as a Background Service (Recommended)
 
-**Option A — Installer (MSI):** Download `segotep-digital-v<version>-windows-x64.msi` from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`) and run it. The installer registers the Segotep Digital background service automatically on install (removing it on uninstall) and adds `segotep-digital.exe` to your PATH so it can be invoked from any terminal.
+**Option 0 — WinGet:** `winget install Delnegend.SegotepDigital` (installs the MSI, registers the background service, and adds `segotep-digital.exe` to PATH).
 
-**Option B — Portable ZIP:** Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `0.1.0`).
+**Option A — Installer (MSI):** Download `segotep-digital-v<version>-windows-x64.msi` from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `1.0.0`) and run it. The installer registers the Segotep Digital background service automatically on install (removing it on uninstall) and adds `segotep-digital.exe` to your PATH so it can be invoked from any terminal.
+
+**Option B — Portable ZIP:** Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `1.0.0`).
 
 1. Open an **elevated** PowerShell (Run as Administrator) and install the background service:
     ```powershell
@@ -102,7 +104,7 @@ sudo systemctl enable --now segotep-digital.service
 
 #### Method 2: Pre-built Binary Releases
 
-1. Download the latest tarball from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`):
+1. Download the latest tarball from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `1.0.0`):
     ```bash
     tar -xJf segotep-digital-v<version>-linux-amd64.tar.xz
     cd segotep-digital-v<version>-linux-amd64
