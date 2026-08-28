@@ -5,9 +5,11 @@ use clap::ValueEnum;
 #[cfg(target_os = "windows")]
 use std::ffi::{CStr, c_void};
 #[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+#[cfg(target_os = "windows")]
 use std::path::Path;
 #[cfg(target_os = "windows")]
-use std::process::Command;
+use std::process::{Command, Stdio};
 #[cfg(target_os = "windows")]
 use std::ptr::null;
 #[cfg(target_os = "windows")]
@@ -21,7 +23,8 @@ use windows_sys::Win32::System::Memory::{
 };
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Threading::{
-    OpenMutexW, ReleaseMutex, SYNCHRONIZATION_SYNCHRONIZE, WaitForSingleObject,
+    CREATE_NO_WINDOW, DETACHED_PROCESS, OpenMutexW, ReleaseMutex, SYNCHRONIZATION_SYNCHRONIZE,
+    WaitForSingleObject,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -505,7 +508,13 @@ fn try_spawn_background_helper() {
         if path.exists() {
             info!("Launching sensor engine helper from {}", path.display());
             let parent_dir = path.parent().unwrap_or_else(|| Path::new("."));
-            let _ = Command::new(path).current_dir(parent_dir).spawn();
+            let _ = Command::new(path)
+                .current_dir(parent_dir)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+                .spawn();
             return;
         }
     }
