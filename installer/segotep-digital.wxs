@@ -1,4 +1,6 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Source paths are resolved relative to the wix build working directory (repo root). -->
+  <?define BinaryPath = "target/x86_64-pc-windows-msvc/release/segotep-digital.exe" ?>
   <Package Name="Segotep Digital"
            Manufacturer="Delnegend"
            Version="$(var.Version)"
@@ -40,7 +42,7 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       <Component Id="SegotepDigitalComponent" Guid="{BE81E444-9C7A-4F86-A18A-CCF534614410}">
         <File Id="SegotepDigitalExe"
-              Source="..\target\x86_64-pc-windows-msvc\release\segotep-digital.exe" />
+              Source="$(var.BinaryPath)" />
       </Component>
     </ComponentGroup>
   </Fragment>
