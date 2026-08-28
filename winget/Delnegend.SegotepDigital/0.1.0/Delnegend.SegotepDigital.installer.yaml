@@ -14,7 +14,7 @@ InstallModes:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64.msi
-    InstallerSha256: FA4884ADE5586189718A92C8A9A75420D2FCDDCF3409A0FC5D2B1114661413D2
+    InstallerSha256: D589CC1CDC3BDBF80136B88BE2C0F7AC7098BFE68944E5BEE5002D7F37E7BFA8
     ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
 AppsAndFeaturesEntries:
   - DisplayName: Segotep Digital
