@@ -1,0 +1,10 @@
+PackageIdentifier: Delnegend.SegotepDigital
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Delnegend
+PackageName: Segotep Digital
+License: MIT OR Apache-2.0
+ShortDescription: Cross-platform driver and background service for Segotep Ice Moon / Digital series AIO CPU coolers with integrated 7-segment digital pump block displays.
+Moniker: segotep-digital
+ManifestType: defaultLocale
+ManifestVersion: 1.12.0

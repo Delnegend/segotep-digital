@@ -92,12 +92,34 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }}
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+
+      - name: Build Windows Installer (Inno Setup)
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc "/DMyAppVersion=${{ inputs.release_version }}" "installer\segotep-digital.iss"
+
+      - name: Compute installer SHA256
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "installer\output\*.exe" | Select-Object -First 1
+          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash
+          Write-Output "Installer: $($installer.Name)"
+          Write-Output "SHA256: $hash"
+          Write-Output "installer_name=$($installer.Name)" >> $env:GITHUB_ENV
+          Write-Output "installer_sha256=$hash" >> $env:GITHUB_ENV
+
       - name: Package Release Bundle (ZIP)
         shell: pwsh
         run: |
           $base = "${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Path $base -Force
           Copy-Item "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" -Destination "$base/"
+          Copy-Item "installer/output/*.exe" -Destination "$base/"
           Copy-Item "README.md" -Destination "$base/"
           Copy-Item "LICENSE-MIT" -Destination "$base/"
           Copy-Item "LICENSE-APACHE" -Destination "$base/"
@@ -110,6 +132,12 @@ jobs:
         with:
           name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}
           path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}.zip
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}-installer
+          path: installer/output/*.exe
 
   release:
     name: Release
@@ -162,8 +190,9 @@ jobs:
             echo "4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`"
             echo
             echo "**Windows Installation**"
-            echo "1. Extract the zip archive: \`segotep-digital-v${VERSION}-windows-x64.zip\`"
-            echo "2. Run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task."
+            echo "1. Install with winget once published: \`winget install Delnegend.SegotepDigital\`"
+            echo "2. Or download the installer \`segotep-digital-v${VERSION}-windows-x64-setup.exe\` and run it (optionally registering the background service)."
+            echo "3. Or extract the zip archive \`segotep-digital-v${VERSION}-windows-x64.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task."
             if [ -n "$COMPARE" ]; then
               echo
               echo "**Full Changelog**: $COMPARE"
@@ -189,3 +218,4 @@ jobs:
           files: |
             artifacts/**/*.tar.xz
             artifacts/**/*.zip
+            artifacts/**/*.exe

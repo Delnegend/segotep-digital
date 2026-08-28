@@ -1,0 +1,19 @@
+# Winget package manifest for segotep-digital.
+# Submit these three files to https://github.com/microsoft/winget-pkgs under
+#   manifests/d/Delnegend/SegotepDigital/<version>/
+# after the release workflow has run and you have the installer SHA256
+# (printed in the "Compute installer SHA256" step of the build-windows job).
+PackageIdentifier: Delnegend.SegotepDigital
+PackageVersion: 0.1.0
+InstallerType: inno
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64-setup.exe
+    # TODO: replace with the SHA256 printed by the release workflow
+    InstallerSha256: CHANGE_ME
+ManifestType: installer
+ManifestVersion: 1.12.0

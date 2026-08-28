@@ -56,18 +56,21 @@ winget install -e --id namazso.PawnIO
 
 #### 1. Install as a Background Service (Recommended)
 
-1. Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `0.1.0`).
-2. Open an **elevated** PowerShell (Run as Administrator) and install the background service:
+**Option A — Installer:** Download `segotep-digital-v<version>-windows-x64-setup.exe` from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`) and run it. Tick the "Register the Segotep Digital background service" task to install the service automatically.
+
+**Option B — Portable ZIP:** Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `0.1.0`).
+
+1. Open an **elevated** PowerShell (Run as Administrator) and install the background service:
     ```powershell
     # On Windows 11 use `sudo`; on older Windows run this prompt as Administrator directly.
     sudo .\segotep-digital.exe --install-service -m 3 -i 1000
     ```
-   *The service will start immediately and automatically boot with Windows.*
+    *The service will start immediately and automatically boot with Windows.*
 
-3. To stop and uninstall the service at any time:
-   ```powershell
-   sudo .\segotep-digital.exe --uninstall-service
-   ```
+2. To stop and uninstall the service at any time:
+    ```powershell
+    sudo .\segotep-digital.exe --uninstall-service
+    ```
 
 #### 2. Run Interactively in Console
 
