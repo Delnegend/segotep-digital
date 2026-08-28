@@ -4,9 +4,9 @@ use std::thread::sleep;
 use std::time::Duration;
 
 use clap::Parser;
-#[cfg(target_os = "windows")]
-use segotep_digital::WindowsSensorSource;
 use segotep_digital::protocol::DEFAULT_FALLBACK_MODEL_ID;
+#[cfg(target_os = "windows")]
+use segotep_digital::windows_service;
 use segotep_digital::{PRODUCT_ID, SegotepDevice, SegotepPacket, SystemTelemetry, VENDOR_ID};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
@@ -43,14 +43,24 @@ struct Args {
     #[arg(long)]
     pid: Option<String>,
 
-    /// Specific sensor backend to use on Windows (auto, ldgt, hwinfo, aida64, sysinfo)
-    #[cfg(target_os = "windows")]
-    #[arg(short = 's', long, default_value = "auto")]
-    source: WindowsSensorSource,
-
     /// Print telemetry metrics to stdout on each tick
     #[arg(short, long)]
     verbose: bool,
+
+    /// Install as a background Windows Service (auto-starts on system boot)
+    #[cfg(target_os = "windows")]
+    #[arg(long)]
+    install_service: bool,
+
+    /// Stop and uninstall the background Windows Service
+    #[cfg(target_os = "windows")]
+    #[arg(long)]
+    uninstall_service: bool,
+
+    /// Run as a Windows Service dispatcher (invoked by Windows SCM)
+    #[cfg(target_os = "windows")]
+    #[arg(long, hide = true)]
+    service: bool,
 }
 
 fn parse_hex_id(id_str: &str, default: u16) -> u16 {
@@ -72,8 +82,6 @@ fn main() {
         .compact()
         .init();
 
-    info!("Starting Segotep Digital Driver");
-
     let vid = args
         .vid
         .as_deref()
@@ -83,10 +91,42 @@ fn main() {
         .as_deref()
         .map_or(PRODUCT_ID, |s| parse_hex_id(s, PRODUCT_ID));
 
+    #[cfg(target_os = "windows")]
+    if args.install_service {
+        info!("Installing Segotep Digital Windows Service...");
+        if let Err(e) =
+            windows_service::install_service(args.interval_ms, args.model_id, args.fahrenheit, vid, pid)
+        {
+            error!("Service installation failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    if args.uninstall_service {
+        info!("Uninstalling Segotep Digital Windows Service...");
+        if let Err(e) = windows_service::uninstall_service() {
+            error!("Service uninstallation failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    #[cfg(target_os = "windows")]
+    if args.service {
+        if let Err(e) =
+            windows_service::run_service(args.interval_ms, args.model_id, args.fahrenheit, vid, pid)
+        {
+            error!("Windows Service execution failed: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    info!("Starting Segotep Digital Driver");
     info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
     info!("Model ID: {}", args.model_id);
-    #[cfg(target_os = "windows")]
-    info!("Windows Sensor Source: {:?}", args.source);
     info!(
         "Update interval: {}ms, Fahrenheit: {}, Screen OFF: {}",
         args.interval_ms, args.fahrenheit, args.screen_off
@@ -112,9 +152,6 @@ fn main() {
     };
 
     let mut telemetry = SystemTelemetry::new();
-    #[cfg(target_os = "windows")]
-    telemetry.set_windows_sensor_source(args.source);
-
     let tick_interval = Duration::from_millis(args.interval_ms.max(100));
     let mut is_connected = false;
 

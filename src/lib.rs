@@ -6,9 +6,9 @@
 pub mod device;
 pub mod monitor;
 pub mod protocol;
+#[cfg(target_os = "windows")]
+pub mod windows_service;
 
 pub use device::{DeviceInfo, SegotepDevice};
-#[cfg(target_os = "windows")]
-pub use monitor::WindowsSensorSource;
 pub use monitor::{HardwareMetrics, SystemTelemetry};
 pub use protocol::{PRODUCT_ID, SegotepPacket, VENDOR_ID};
