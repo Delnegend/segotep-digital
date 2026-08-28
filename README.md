@@ -56,11 +56,12 @@ winget install -e --id namazso.PawnIO
 
 #### 1. Install as a Background Service (Recommended)
 
-1. Download `segotep-digital-v0.1.0-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it.
-2. Open an elevated PowerShell (Run as Administrator) and install the background service:
-   ```powershell
-   sudo .\segotep-digital.exe --install-service -m 3 -i 1000
-   ```
+1. Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `0.1.0`).
+2. Open an **elevated** PowerShell (Run as Administrator) and install the background service:
+    ```powershell
+    # On Windows 11 use `sudo`; on older Windows run this prompt as Administrator directly.
+    sudo .\segotep-digital.exe --install-service -m 3 -i 1000
+    ```
    *The service will start immediately and automatically boot with Windows.*
 
 3. To stop and uninstall the service at any time:
@@ -98,11 +99,11 @@ sudo systemctl enable --now segotep-digital.service
 
 #### Method 2: Pre-built Binary Releases
 
-1. Download the latest tarball from [Releases](https://github.com/Delnegend/segotep-digital/releases):
-   ```bash
-   tar -xJf segotep-digital-v0.1.0-linux-amd64.tar.xz
-   cd segotep-digital-v0.1.0-linux-amd64
-   ```
+1. Download the latest tarball from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`):
+    ```bash
+    tar -xJf segotep-digital-v<version>-linux-amd64.tar.xz
+    cd segotep-digital-v<version>-linux-amd64
+    ```
 
 2. Copy the binary and set permissions:
    ```bash

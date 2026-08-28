@@ -75,7 +75,7 @@ packet-beta
 ### Key Field Descriptions
 - **Magic Bytes (`0xDC 0xDD`)**: Required framing prefix for all valid command packets sent to the device.
 - **State Byte (Index 3)**: `0x00` instructs the MCU to stay active and refresh digits; `0x0E` commands screen power down (blank digits and LEDs).
-- **Model ID (Index 4)**: `1` for standard digital coolers; `3` for Ice Moon 360 series coolers.
+- **Model ID (Index 4)**: `1` for standard digital coolers; `3` for Ice Moon 360 series coolers. When the screen is OFF, this byte is overridden to `0x0F` (`FLASH_VALUE1_OFF`) instead of the model ID (see `src/protocol.rs`).
 - **Fixed Markers (`0x01` at index 13, `0x0C` at index 17)**: Protocol framing constants discovered through reverse engineering.
 - **16-bit Metric Encodings (Indices 23–26 & 29–32)**: Serialized as little-endian unsigned 16-bit integers (`u16`).
 
@@ -101,7 +101,7 @@ sequenceDiagram
 
     Note over App,MCU: Graceful Shutdown Phase
     critical Signal Trapped / Service Stop (Ctrl+C / SCM Stop / --screen-off)
-        App->>App: Build Screen-OFF Report [0xDC, 0xDD, 0x0E, 0x0F, ...]
+        App->>App: Build Screen-OFF Report [0x00, 0xDC, 0xDD, 0x0E, 0x0F, ...]<br/>(Byte 0 = Report ID 0x00; Byte 3 = 0x0E OFF; Byte 4 = 0x0F override)
         App->>MCU: hid_write(Screen-OFF report)
         Note over MCU: Blank display screen & turn off LEDs
         App->>OS: hid_close()
