@@ -56,7 +56,7 @@ winget install -e --id namazso.PawnIO
 
 #### 1. Install as a Background Service (Recommended)
 
-**Option A — Installer (MSI):** Download `segotep-digital-v<version>-windows-x64.msi` from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`) and run it. The installer registers the Segotep Digital background service automatically on install and removes it on uninstall.
+**Option A — Installer (MSI):** Download `segotep-digital-v<version>-windows-x64.msi` from [Releases](https://github.com/Delnegend/segotep-digital/releases) (replace `<version>` with the current release tag, e.g. `0.1.0`) and run it. The installer registers the Segotep Digital background service automatically on install (removing it on uninstall) and adds `segotep-digital.exe` to your PATH so it can be invoked from any terminal.
 
 **Option B — Portable ZIP:** Download `segotep-digital-v<version>-windows-x64.zip` from [Releases](https://github.com/Delnegend/segotep-digital/releases) and extract it (replace `<version>` with the current release tag, e.g. `0.1.0`).
 

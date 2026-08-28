@@ -44,6 +44,20 @@
         <File Id="SegotepDigitalExe"
               Source="$(var.BinaryPath)" />
       </Component>
+      <Component Id="PathEnvironmentVariable" Guid="{0EEE6C06-A8B9-4FA6-89F2-7A420F3BEA77}">
+        <Environment Id="SegotepDigitalPath"
+                     Action="set"
+                     Part="last"
+                     Name="PATH"
+                     System="yes"
+                     Value="[INSTALLFOLDER]" />
+        <RegistryValue Root="HKLM"
+                       Key="Software\Delnegend\SegotepDigital"
+                       Name="InstallPath"
+                       Type="string"
+                       Value="[INSTALLFOLDER]"
+                       KeyPath="yes" />
+      </Component>
     </ComponentGroup>
   </Fragment>
 </Wix>
