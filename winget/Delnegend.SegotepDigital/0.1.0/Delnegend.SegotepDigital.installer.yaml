@@ -5,15 +5,21 @@
 # (printed in the "Compute installer SHA256" step of the build-windows job).
 PackageIdentifier: Delnegend.SegotepDigital
 PackageVersion: 0.1.0
-InstallerType: inno
+InstallerType: wix
 InstallModes:
   - interactive
   - silent
   - silentWithProgress
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64-setup.exe
+    InstallerUrl: https://github.com/Delnegend/segotep-digital/releases/download/v0.1.0/segotep-digital-v0.1.0-windows-x64.msi
     # TODO: replace with the SHA256 printed by the release workflow
     InstallerSha256: CHANGE_ME
+    ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
+AppsAndFeaturesEntries:
+  - DisplayName: Segotep Digital
+    DisplayVersion: 0.1.0
+    ProductCode: '{ED136298-EAEB-40BA-9776-419FF44CDBFB}'
+    UpgradeCode: '{312623A3-840C-48A2-BBF1-BBF28B2B98E4}'
 ManifestType: installer
 ManifestVersion: 1.12.0

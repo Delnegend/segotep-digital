@@ -1,0 +1,47 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Segotep Digital"
+           Manufacturer="Delnegend"
+           Version="$(var.Version)"
+           UpgradeCode="{312623A3-840C-48A2-BBF1-BBF28B2B98E4}"
+           ProductCode="{ED136298-EAEB-40BA-9776-419FF44CDBFB}"
+           Language="1033">
+    <SummaryInformation Description="Cross-platform driver and background service for Segotep Ice Moon / Digital series AIO CPU coolers." />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Segotep Digital" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Segotep Digital" Level="1">
+      <ComponentGroupRef Id="ProductComponents" />
+    </Feature>
+
+    <CustomAction Id="RegisterService"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check"
+                  FileKey="SegotepDigitalExe"
+                  ExeCommand="--install-service" />
+    <CustomAction Id="UnregisterService"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check"
+                  FileKey="SegotepDigitalExe"
+                  ExeCommand="--uninstall-service" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RegisterService" After="InstallFiles" Condition='NOT Installed' />
+      <Custom Action="UnregisterService" Before="RemoveFiles" Condition='REMOVE~="ALL"' />
+    </InstallExecuteSequence>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="SegotepDigitalComponent" Guid="{BE81E444-9C7A-4F86-A18A-CCF534614410}">
+        <File Id="SegotepDigitalExe"
+              Source="..\target\x86_64-pc-windows-msvc\release\segotep-digital.exe" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

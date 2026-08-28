@@ -92,21 +92,22 @@ jobs:
         run: |
           cargo build --release --target ${{ matrix.target }}
 
-      - name: Install Inno Setup
+      - name: Install WiX Toolset
         shell: pwsh
         run: |
-          choco install innosetup -y --no-progress
+          dotnet tool install --global wix
 
-      - name: Build Windows Installer (Inno Setup)
+      - name: Build Windows Installer (WiX MSI)
         shell: pwsh
         run: |
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          & $iscc "/DMyAppVersion=${{ inputs.release_version }}" "installer\segotep-digital.iss"
+          $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+          New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
+          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ inputs.release_version }}" -o "installer\output\segotep-digital-v${{ inputs.release_version }}-windows-x64.msi"
 
       - name: Compute installer SHA256
         shell: pwsh
         run: |
-          $installer = Get-ChildItem "installer\output\*.exe" | Select-Object -First 1
+          $installer = Get-ChildItem "installer\output\*.msi" | Select-Object -First 1
           $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash
           Write-Output "Installer: $($installer.Name)"
           Write-Output "SHA256: $hash"
@@ -119,7 +120,7 @@ jobs:
           $base = "${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}"
           New-Item -ItemType Directory -Path $base -Force
           Copy-Item "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" -Destination "$base/"
-          Copy-Item "installer/output/*.exe" -Destination "$base/"
+          Copy-Item "installer/output/*.msi" -Destination "$base/"
           Copy-Item "README.md" -Destination "$base/"
           Copy-Item "LICENSE-MIT" -Destination "$base/"
           Copy-Item "LICENSE-APACHE" -Destination "$base/"
@@ -137,7 +138,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}-installer
-          path: installer/output/*.exe
+          path: installer/output/*.msi
 
   release:
     name: Release
@@ -191,7 +192,7 @@ jobs:
             echo
             echo "**Windows Installation**"
             echo "1. Install with winget once published: \`winget install Delnegend.SegotepDigital\`"
-            echo "2. Or download the installer \`segotep-digital-v${VERSION}-windows-x64-setup.exe\` and run it (optionally registering the background service)."
+            echo "2. Or download the installer \`segotep-digital-v${VERSION}-windows-x64.msi\` and run it (optionally registering the background service)."
             echo "3. Or extract the zip archive \`segotep-digital-v${VERSION}-windows-x64.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task."
             if [ -n "$COMPARE" ]; then
               echo
