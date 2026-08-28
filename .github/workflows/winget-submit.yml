@@ -102,6 +102,11 @@ jobs:
           git checkout -b "Delnegend.SegotepDigital-${VERSION}"
           echo "branch=Delnegend.SegotepDigital-${VERSION}" >> "$GITHUB_OUTPUT"
           echo "fork_owner=$(gh api user --jq .login)" >> "$GITHUB_OUTPUT"
+          if [[ -d "manifests/d/Delnegend/SegotepDigital" ]]; then
+            echo "title_prefix=New version" >> "$GITHUB_OUTPUT"
+          else
+            echo "title_prefix=New package" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Copy manifests and commit
         if: steps.prep.outputs.branch != ''
@@ -112,18 +117,19 @@ jobs:
           cp "winget/Delnegend.SegotepDigital/${VERSION}/"*.yaml "winget-pkgs/manifests/d/Delnegend/SegotepDigital/${VERSION}/"
           cd winget-pkgs
           git add "manifests/d/Delnegend/SegotepDigital/${VERSION}"
-          git commit -m "New version: Delnegend.SegotepDigital version ${VERSION}"
+          git commit -m "${{ steps.prep.outputs.title_prefix }}: Delnegend.SegotepDigital version ${VERSION}"
 
       - name: Push branch and open PR
         if: steps.prep.outputs.branch != ''
         shell: bash
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          PREFIX="${{ steps.prep.outputs.title_prefix }}"
           cd winget-pkgs
           git push "https://x-access-token:${GH_TOKEN}@github.com/${{ steps.prep.outputs.fork_owner }}/winget-pkgs.git" "HEAD:${{ steps.prep.outputs.branch }}"
           BODY=$(cat <<EOF
           ## Purpose
-          - New version: \`Delnegend.SegotepDigital\` version \`${VERSION}\`
+          - ${PREFIX}: \`Delnegend.SegotepDigital\` version \`${VERSION}\`
 
           ## What's Changed
           - Adds the manifest set for version \`${VERSION}\` of \`Delnegend.SegotepDigital\` (segotep-digital: open-source driver and background service for Segotep Ice Moon / Digital series AIO coolers).
