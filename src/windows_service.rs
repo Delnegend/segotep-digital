@@ -250,7 +250,9 @@ pub fn run_service(
 
     let service_table = [
         SERVICE_TABLE_ENTRYA {
-            lpServiceName: SERVICE_NAME.as_ptr().cast_mut(),
+            // SAFETY: lpServiceName is documented [in] (read-only) by the SCM for
+            // SERVICE_WIN32_OWN_PROCESS; SERVICE_NAME is a null-terminated static byte string.
+            lpServiceName: SERVICE_NAME.as_ptr() as *mut u8,
             lpServiceProc: Some(service_main),
         },
         SERVICE_TABLE_ENTRYA {

@@ -8,18 +8,9 @@ use tracing::debug;
 use windows_sys::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryA};
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Performance::{
-    PDH_FMT_DOUBLE, PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData,
-    PdhGetFormattedCounterValue, PdhOpenQueryW,
+    PDH_FMT_COUNTERVALUE, PDH_FMT_DOUBLE, PdhAddEnglishCounterW, PdhCloseQuery,
+    PdhCollectQueryData, PdhGetFormattedCounterValue, PdhOpenQueryW,
 };
-
-#[repr(C)]
-#[derive(Copy, Clone)]
-#[allow(non_snake_case)]
-struct PdhFmtCounterValueDouble {
-    CStatus: u32,
-    _padding: u32,
-    doubleValue: f64,
-}
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NativeHardwareSample {
@@ -125,16 +116,16 @@ impl WindowsPdhMonitor {
             let mut cpu_load = None;
 
             if self.cpu_power_counter != 0 {
-                let mut val: PdhFmtCounterValueDouble = std::mem::zeroed();
+                let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_power_counter,
                     PDH_FMT_DOUBLE,
                     std::ptr::null_mut(),
-                    (&raw mut val).cast(),
+                    &raw mut val,
                 ) == 0
                     && val.CStatus == 0
                 {
-                    let mw = val.doubleValue;
+                    let mw = val.Anonymous.doubleValue;
                     if mw > 0.0 {
                         // mW -> Watts
                         let watts = (mw / 1000.0).round().clamp(0.0, 65535.0) as u16;
@@ -144,16 +135,16 @@ impl WindowsPdhMonitor {
             }
 
             if self.cpu_clock_counter != 0 {
-                let mut val: PdhFmtCounterValueDouble = std::mem::zeroed();
+                let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_clock_counter,
                     PDH_FMT_DOUBLE,
                     std::ptr::null_mut(),
-                    (&raw mut val).cast(),
+                    &raw mut val,
                 ) == 0
                     && val.CStatus == 0
                 {
-                    let mhz = val.doubleValue;
+                    let mhz = val.Anonymous.doubleValue;
                     if mhz > 100.0 {
                         cpu_clock = Some(mhz.round().clamp(0.0, 65535.0) as u16);
                     }
@@ -161,16 +152,16 @@ impl WindowsPdhMonitor {
             }
 
             if self.cpu_util_counter != 0 {
-                let mut val: PdhFmtCounterValueDouble = std::mem::zeroed();
+                let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_util_counter,
                     PDH_FMT_DOUBLE,
                     std::ptr::null_mut(),
-                    (&raw mut val).cast(),
+                    &raw mut val,
                 ) == 0
                     && val.CStatus == 0
                 {
-                    let util = val.doubleValue;
+                    let util = val.Anonymous.doubleValue;
                     if util >= 0.0 {
                         cpu_load = Some(util.clamp(0.0, 100.0) as f32);
                     }
@@ -198,13 +189,13 @@ impl Drop for WindowsPdhMonitor {
 // NVIDIA NVML Native User-space GPU Monitoring
 // ---------------------------------------------------------------------------
 
-type NvmlInitFn = unsafe extern "C" fn() -> i32;
-type NvmlShutdownFn = unsafe extern "C" fn() -> i32;
-type NvmlDeviceGetCountFn = unsafe extern "C" fn(*mut u32) -> i32;
-type NvmlDeviceGetHandleByIndexFn = unsafe extern "C" fn(u32, *mut *mut c_void) -> i32;
-type NvmlDeviceGetTemperatureFn = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> i32;
-type NvmlDeviceGetPowerUsageFn = unsafe extern "C" fn(*mut c_void, *mut u32) -> i32;
-type NvmlDeviceGetClockInfoFn = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> i32;
+type NvmlInitFn = unsafe extern "C" fn() -> u32;
+type NvmlShutdownFn = unsafe extern "C" fn() -> u32;
+type NvmlDeviceGetCountFn = unsafe extern "C" fn(*mut u32) -> u32;
+type NvmlDeviceGetHandleByIndexFn = unsafe extern "C" fn(u32, *mut *mut c_void) -> u32;
+type NvmlDeviceGetTemperatureFn = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> u32;
+type NvmlDeviceGetPowerUsageFn = unsafe extern "C" fn(*mut c_void, *mut u32) -> u32;
+type NvmlDeviceGetClockInfoFn = unsafe extern "C" fn(*mut c_void, u32, *mut u32) -> u32;
 
 #[repr(C)]
 struct NvmlUtilization {
@@ -212,7 +203,7 @@ struct NvmlUtilization {
     memory: u32,
 }
 type NvmlDeviceGetUtilizationRatesFn =
-    unsafe extern "C" fn(*mut c_void, *mut NvmlUtilization) -> i32;
+    unsafe extern "C" fn(*mut c_void, *mut NvmlUtilization) -> u32;
 
 pub struct WindowsNvmlGpuMonitor {
     device_handle: *mut c_void,
