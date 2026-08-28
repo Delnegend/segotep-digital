@@ -94,9 +94,13 @@ fn main() {
     #[cfg(target_os = "windows")]
     if args.install_service {
         info!("Installing Segotep Digital Windows Service...");
-        if let Err(e) =
-            windows_service::install_service(args.interval_ms, args.model_id, args.fahrenheit, vid, pid)
-        {
+        if let Err(e) = windows_service::install_service(
+            args.interval_ms,
+            args.model_id,
+            args.fahrenheit,
+            vid,
+            pid,
+        ) {
             error!("Service installation failed: {e}");
             std::process::exit(1);
         }
