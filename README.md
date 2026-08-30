@@ -2,8 +2,12 @@
 
 Cross-platform driver and background service for Segotep Ice Moon / Digital series AIO CPU coolers with integrated 7-segment digital pump block displays.
 
-![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue)
-![Platform](https://img.shields.io/badge/platform-Linux%20(x86__64%20%7C%20aarch64)%20%7C%20Windows%20(x64)-orange)
+![Rust](https://img.shields.io/badge/Rust-1.85-CE412B?style=flat&logo=rust&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=flat)
+![Platform](https://img.shields.io/badge/platform-Linux%20(x86__64%20%7C%20aarch64)%20%7C%20Windows%20(x64)-orange?style=flat)
+![HID](https://img.shields.io/badge/HID-34--byte-000000?style=flat)
+![PawnIO](https://img.shields.io/badge/PawnIO-signed-0078D4?style=flat)
+![systemd](https://img.shields.io/badge/systemd-service-06B6D4?style=flat)
 
 ---
 
