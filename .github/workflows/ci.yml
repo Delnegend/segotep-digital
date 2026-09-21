@@ -15,7 +15,7 @@ jobs:
     name: Check (just check)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux build dependencies
         run: |
@@ -27,7 +27,7 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - uses: extractions/setup-just@v2
+      - uses: extractions/setup-just@v4
 
       - name: Run verification
         run: just check
