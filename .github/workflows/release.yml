@@ -1,74 +1,49 @@
 name: Release
 
 on:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly: Sunday 00:00 UTC
   workflow_dispatch:
-    inputs:
-      release_version:
-        description: Release version (e.g. 0.1.0)
-        required: true
-        type: string
-        default: 0.1.0
-      create_release:
-        description: Push to GitHub Releases
-        required: true
-        type: boolean
-        default: false
-  pull_request:
-    types: [closed]
-    branches:
-      - main
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 env:
   BINARY_NAME: segotep-digital
 
 jobs:
-  prepare:
-    name: Prepare
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' &&
-       github.event.pull_request.merged == true &&
-       (contains(github.event.pull_request.labels.*.name, 'dependencies') || github.event.pull_request.head.ref == 'chore/update-deps'))
+  version:
+    name: Determine Next Version
+    runs-on: ubuntu-slim
     outputs:
-      release_version: ${{ steps.version.outputs.version }}
-      create_release: ${{ steps.version.outputs.create_release }}
+      bump: ${{ steps.semver.outputs.bump }}
+      version: ${{ steps.semver.outputs.next }}
+      plain_version: ${{ steps.semver.outputs.nextStrict }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Determine version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "version=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
-            echo "create_release=${{ inputs.create_release }}" >> "$GITHUB_OUTPUT"
-          else
-            LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || echo 'v0.0.0')"
-            PLAIN_VERSION="${LATEST_TAG#v}"
-            IFS='.' read -r major minor patch <<< "$PLAIN_VERSION"
-            major="${major:-0}"
-            minor="${minor:-1}"
-            patch="${patch:-0}"
-            if [ "$LATEST_TAG" = "v0.0.0" ]; then
-              NEXT_VERSION="0.1.0"
-            else
-              NEXT_PATCH=$((patch + 1))
-              NEXT_VERSION="${major}.${minor}.${NEXT_PATCH}"
-            fi
-            echo "Latest tag: $LATEST_TAG, computed next patch version: $NEXT_VERSION"
-            echo "version=$NEXT_VERSION" >> "$GITHUB_OUTPUT"
-            echo "create_release=true" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Next version (Conventional Commits)
+        id: semver
+        uses: ietf-tools/semver-action@v1
+        with:
+          token: ${{ github.token }}
+          fallbackTag: v0.0.0
+          noNewCommitBehavior: silent
+          noVersionBumpBehavior: patch
 
   build-linux:
     name: Build Linux (${{ matrix.target }})
-    needs: prepare
+    needs: version
+    if: needs.version.outputs.bump != 'none'
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ needs.prepare.outputs.release_version }}
+      VERSION: ${{ needs.version.outputs.plain_version }}
     strategy:
       matrix:
         include:
@@ -79,7 +54,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -93,7 +68,7 @@ jobs:
 
       - name: Build Binary
         env:
-          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.release_version }}
+          CARGO_PKG_VERSION: ${{ needs.version.outputs.plain_version }}
         run: |
           cross build --release --target ${{ matrix.target }}
 
@@ -117,10 +92,11 @@ jobs:
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
-    needs: prepare
+    needs: version
+    if: needs.version.outputs.bump != 'none'
     runs-on: windows-latest
     env:
-      VERSION: ${{ needs.prepare.outputs.release_version }}
+      VERSION: ${{ needs.version.outputs.plain_version }}
     strategy:
       matrix:
         include:
@@ -129,7 +105,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -138,7 +114,7 @@ jobs:
 
       - name: Build Binary
         env:
-          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.release_version }}
+          CARGO_PKG_VERSION: ${{ needs.version.outputs.plain_version }}
         run: |
           cargo build --release --target ${{ matrix.target }}
 
@@ -154,17 +130,7 @@ jobs:
         run: |
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
-          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ needs.prepare.outputs.release_version }}" -o "installer\output\segotep-digital-v${{ needs.prepare.outputs.release_version }}-windows-x64.msi"
-
-      - name: Compute installer SHA256
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem "installer\output\*.msi" | Select-Object -First 1
-          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash
-          Write-Output "Installer: $($installer.Name)"
-          Write-Output "SHA256: $hash"
-          Write-Output "installer_name=$($installer.Name)" >> $env:GITHUB_ENV
-          Write-Output "installer_sha256=$hash" >> $env:GITHUB_ENV
+          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ needs.version.outputs.plain_version }}" -o "installer\output\segotep-digital-v${{ needs.version.outputs.plain_version }}-windows-x64.msi"
 
       - name: Package Release Bundle (ZIP)
         shell: pwsh
@@ -193,92 +159,49 @@ jobs:
           path: installer/output/*.msi
 
   release:
-    name: Release
-    needs: [prepare, build-linux, build-windows]
-    if: needs.prepare.outputs.create_release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    name: Tag & Release
+    needs: [version, build-linux, build-windows]
+    if: needs.version.outputs.bump != 'none'
+    runs-on: ubuntu-slim
     env:
-      VERSION: ${{ needs.prepare.outputs.release_version }}
+      VERSION: ${{ needs.version.outputs.plain_version }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Generate release notes from commits since last tag
-        id: notes
-        run: |
-          PREV="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [ -n "$PREV" ]; then
-            RANGE="$PREV..HEAD"
-            COMPARE="https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...v${VERSION}"
-          else
-            RANGE="$(git rev-list --max-parents=0 HEAD 2>/dev/null | tail -1)..HEAD"
-            COMPARE=""
-          fi
-          echo "Generating notes for range $RANGE"
-          TMP="$(mktemp -d)"
-          git log --pretty=format:"%s" "$RANGE" > "$TMP/all"
-          {
-            echo "## What's Changed"
-            echo
-            for spec in "feat **Features**" "fix **Bug Fixes**" "docs **Documentation**" "ci **CI & Workflows**" "test **Tests**" "refactor **Refactoring**" "perf **Performance**" "chore **Chores**"; do
-              type="${spec%% *}"
-              grep -E "^${type}(\([^)]*\))?: " "$TMP/all" > "$TMP/items" || continue
-              echo "${spec#* }"
-              sed -E "s/^${type}(\([^)]*\))?: +/  - /" "$TMP/items"
-              echo
-            done
-            grep -Ev "^[a-z]+(\([^)]*\))?: " "$TMP/all" > "$TMP/other" || true
-            if [ -s "$TMP/other" ]; then
-              echo "**Other Changes**"
-              sed 's/^/  - /' "$TMP/other"
-              echo
-            fi
-            echo "**Linux Installation**"
-            echo "1. Extract the tarball: \`tar -xJf segotep-digital-v${VERSION}-linux-amd64.tar.xz\`"
-            echo "2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`"
-            echo "3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`"
-            echo "4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`"
-            echo
-            echo "**Windows Installation**"
-            echo "1. Install with winget once published: \`winget install Delnegend.SegotepDigital\`"
-            echo "2. Or download the installer \`segotep-digital-v${VERSION}-windows-x64.msi\` and run it (optionally registering the background service)."
-            echo "3. Or extract the zip archive \`segotep-digital-v${VERSION}-windows-x64.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task."
-            if [ -n "$COMPARE" ]; then
-              echo
-              echo "**Full Changelog**: $COMPARE"
-            fi
-          } > notes.md
-          echo "=== draft release notes ==="
-          cat notes.md
-          echo "notes=$PWD/notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
 
-      - name: Create Release
+      - name: Generate installation notes
+        id: notes
+        run: |
+          cat <<EOF > install-notes.md
+          **Linux Installation**
+          1. Extract the tarball: \`tar -xJf segotep-digital-v${VERSION}-linux-amd64.tar.xz\`
+          2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`
+          3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`
+          4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`
+
+          **Windows Installation**
+          1. Download the installer \`segotep-digital-v${VERSION}-windows-x64.msi\` and run it (optionally registering the background service).
+          2. Or extract the zip archive \`segotep-digital-v${VERSION}-windows-x64.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task.
+          EOF
+          echo "notes=$PWD/install-notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Consolidated Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ needs.prepare.outputs.release_version }}
-          name: v${{ needs.prepare.outputs.release_version }}
+          tag_name: ${{ needs.version.outputs.version }}
+          name: ${{ needs.version.outputs.version }}
           body_path: ${{ steps.notes.outputs.notes }}
+          generate_release_notes: true
           draft: false
           prerelease: false
           files: |
             artifacts/**/*.tar.xz
             artifacts/**/*.zip
             artifacts/**/*.msi
-
-      - name: Trigger winget submission
-        # Releases created with GITHUB_TOKEN do not fire the `release: published`
-        # event, so dispatch the winget-submit workflow explicitly.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh workflow run "Submit to WinGet" -f version="${{ needs.prepare.outputs.release_version }}"

@@ -1,0 +1,56 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "02:00"
+    labels:
+      - dependencies
+    assignees:
+      - Delnegend
+    commit-message:
+      prefix: "chore(deps)"
+    # Supply chain security: quarantine newly published versions for 14 days
+    cooldown:
+      default-days: 14
+    groups:
+      patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "02:00"
+    labels:
+      - dependencies
+    assignees:
+      - Delnegend
+    commit-message:
+      prefix: "chore(deps)"
+    cooldown:
+      default-days: 14
+    groups:
+      patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+      major:
+        patterns:
+          - "*"
+        update-types:
+          - "major"
+    open-pull-requests-limit: 2
