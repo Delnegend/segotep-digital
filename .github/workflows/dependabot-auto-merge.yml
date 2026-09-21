@@ -2,6 +2,7 @@ name: Dependabot auto-merge
 
 on:
   pull_request:
+    types: [opened, labeled, synchronize]
     branches: [main]
 
 permissions:
@@ -10,7 +11,7 @@ permissions:
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'dependencies')
+    if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-slim
     steps:
       - name: Fetch Dependabot metadata
