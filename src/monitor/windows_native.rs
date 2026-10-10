@@ -25,10 +25,10 @@ pub struct NativeHardwareSample {
 
 #[cfg(target_os = "windows")]
 pub struct WindowsPdhMonitor {
-    query: isize,
-    cpu_power_counter: isize,
-    cpu_clock_counter: isize,
-    cpu_util_counter: isize,
+    query: *mut c_void,
+    cpu_power_counter: *mut c_void,
+    cpu_clock_counter: *mut c_void,
+    cpu_util_counter: *mut c_void,
     has_collected_first_sample: bool,
 }
 
@@ -44,10 +44,10 @@ impl WindowsPdhMonitor {
     #[must_use]
     pub fn new() -> Self {
         let mut monitor = Self {
-            query: 0,
-            cpu_power_counter: 0,
-            cpu_clock_counter: 0,
-            cpu_util_counter: 0,
+            query: std::ptr::null_mut(),
+            cpu_power_counter: std::ptr::null_mut(),
+            cpu_clock_counter: std::ptr::null_mut(),
+            cpu_util_counter: std::ptr::null_mut(),
             has_collected_first_sample: false,
         };
         monitor.init();
@@ -56,7 +56,7 @@ impl WindowsPdhMonitor {
 
     fn init(&mut self) {
         unsafe {
-            let mut query = 0;
+            let mut query: *mut c_void = std::ptr::null_mut();
             if PdhOpenQueryW(std::ptr::null(), 0, &raw mut query) != 0 {
                 return;
             }
@@ -66,7 +66,7 @@ impl WindowsPdhMonitor {
             let pwr_path: Vec<u16> = "\\Energy Meter(rapl_package0_pkg)\\Power\0"
                 .encode_utf16()
                 .collect();
-            let mut pwr_counter = 0;
+            let mut pwr_counter: *mut c_void = std::ptr::null_mut();
             let _ = PdhAddEnglishCounterW(query, pwr_path.as_ptr(), 0, &raw mut pwr_counter);
             self.cpu_power_counter = pwr_counter;
 
@@ -74,7 +74,7 @@ impl WindowsPdhMonitor {
             let clk_path: Vec<u16> = "\\Processor Information(_Total)\\Actual Frequency\0"
                 .encode_utf16()
                 .collect();
-            let mut clk_counter = 0;
+            let mut clk_counter: *mut c_void = std::ptr::null_mut();
             let _ = PdhAddEnglishCounterW(query, clk_path.as_ptr(), 0, &raw mut clk_counter);
             self.cpu_clock_counter = clk_counter;
 
@@ -82,7 +82,7 @@ impl WindowsPdhMonitor {
             let util_path: Vec<u16> = "\\Processor Information(_Total)\\% Processor Utility\0"
                 .encode_utf16()
                 .collect();
-            let mut util_counter = 0;
+            let mut util_counter: *mut c_void = std::ptr::null_mut();
             let _ = PdhAddEnglishCounterW(query, util_path.as_ptr(), 0, &raw mut util_counter);
             self.cpu_util_counter = util_counter;
 
@@ -97,7 +97,7 @@ impl WindowsPdhMonitor {
         clippy::as_conversions
     )]
     pub fn sample(&mut self) -> (Option<u16>, Option<u16>, Option<f32>) {
-        if self.query == 0 {
+        if self.query.is_null() {
             return (None, None, None);
         }
 
@@ -115,7 +115,7 @@ impl WindowsPdhMonitor {
             let mut cpu_clock = None;
             let mut cpu_load = None;
 
-            if self.cpu_power_counter != 0 {
+            if !self.cpu_power_counter.is_null() {
                 let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_power_counter,
@@ -134,7 +134,7 @@ impl WindowsPdhMonitor {
                 }
             }
 
-            if self.cpu_clock_counter != 0 {
+            if !self.cpu_clock_counter.is_null() {
                 let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_clock_counter,
@@ -151,7 +151,7 @@ impl WindowsPdhMonitor {
                 }
             }
 
-            if self.cpu_util_counter != 0 {
+            if !self.cpu_util_counter.is_null() {
                 let mut val = std::mem::zeroed::<PDH_FMT_COUNTERVALUE>();
                 if PdhGetFormattedCounterValue(
                     self.cpu_util_counter,
@@ -176,11 +176,11 @@ impl WindowsPdhMonitor {
 #[cfg(target_os = "windows")]
 impl Drop for WindowsPdhMonitor {
     fn drop(&mut self) {
-        if self.query != 0 {
+        if !self.query.is_null() {
             unsafe {
                 let _ = PdhCloseQuery(self.query);
             }
-            self.query = 0;
+            self.query = std::ptr::null_mut();
         }
     }
 }
