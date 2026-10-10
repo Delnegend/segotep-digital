@@ -236,11 +236,14 @@ jobs:
       - name: Build Windows Installer (WiX MSI)
         shell: pwsh
         env:
-          VERSION: ${{ needs.prepare.outputs.version }}
+          # A `commit` test build has no release version — it resolves to the
+          # commit SHA — and WiX accepts only a four-part or semantic version, so
+          # the installer gets a placeholder. Only a real release ships.
+          WIX_VERSION: ${{ needs.prepare.outputs.publish == 'true' && needs.prepare.outputs.version || '0.0.0' }}
         run: |
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
-          wix build installer\segotep-digital.wxs -arch x64 -d "Version=$env:VERSION" -o "installer\output\segotep-digital-v$env:VERSION-windows-x64.msi"
+          wix build installer\segotep-digital.wxs -arch x64 -d "Version=$env:WIX_VERSION" -o "installer\output\segotep-digital-v$env:WIX_VERSION-windows-x64.msi"
 
       - name: Package Release Bundle (ZIP)
         shell: pwsh
