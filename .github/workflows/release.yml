@@ -1,9 +1,23 @@
-name: Release
+name: Release / Build Artifacts
 
 on:
-  schedule:
-    - cron: '0 0 * * 0' # Weekly: Sunday 00:00 UTC
   workflow_dispatch:
+    inputs:
+      target:
+        description: "Release mode / build target"
+        required: true
+        type: choice
+        default: "new-tag"
+        options:
+          - new-tag  # Gate on CI -> bump version -> tag & push -> build & publish release
+          - tag      # Rebuild existing tag -> build & publish release
+          - commit   # Test build latest commit -> upload Actions artifacts only (no release)
+      ref:
+        description: "Custom tag or commit SHA (optional, defaults to latest)"
+        required: false
+        type: string
+  schedule:
+    - cron: '0 0 * * 0' # Weekly: Sunday 00:00 UTC (defaults to target: new-tag)
 
 concurrency:
   group: release-main
@@ -16,19 +30,38 @@ env:
   BINARY_NAME: segotep-digital
 
 jobs:
-  version:
-    name: Determine Next Version
-    runs-on: ubuntu-slim
+  prepare:
+    name: Prepare / Bump Version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
-      bump: ${{ steps.semver.outputs.bump }}
-      version: ${{ steps.semver.outputs.next }}
-      plain_version: ${{ steps.semver.outputs.nextStrict }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      version: ${{ steps.resolve.outputs.version }}
+      publish: ${{ steps.resolve.outputs.publish }}
+      skip: ${{ steps.resolve.outputs.skip }}
     steps:
       - uses: actions/checkout@v7
         with:
+          token: ${{ github.token }}
+          persist_credentials: true
           fetch-depth: 0
 
-      - name: Next version (Conventional Commits)
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends pkg-config libusb-1.0-0-dev libudev-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: extractions/setup-just@v4
+
+      # -----------------------------------------------------------------------
+      # Mode 1: new-tag (calculate semver -> CI gate -> just bump -> atomic push)
+      # -----------------------------------------------------------------------
+      - name: Calculate Next SemVer
+        if: (inputs.target || 'new-tag') == 'new-tag'
         id: semver
         uses: ietf-tools/semver-action@v1
         with:
@@ -37,13 +70,79 @@ jobs:
           noNewCommitBehavior: silent
           noVersionBumpBehavior: patch
 
+      - name: CI Gate (verify code is green before bumping)
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        run: just check
+
+      - name: Bump package manager version
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        env:
+          NEXT_STRICT: ${{ steps.semver.outputs.nextStrict }}
+        run: |
+          set -euo pipefail
+          just bump "$NEXT_STRICT"
+
+      - name: Commit, Tag, and Push atomically
+        if: (inputs.target || 'new-tag') == 'new-tag' && steps.semver.outputs.bump != 'none'
+        env:
+          NEXT_TAG: ${{ steps.semver.outputs.next }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "actions@users.noreply.github.com"
+
+          git add -u
+          git diff --staged --quiet && { echo "::error::bump produced no change in package files"; exit 1; }
+          git commit -m "chore(release): ${NEXT_TAG}"
+
+          git rev-parse -q --verify "refs/tags/${NEXT_TAG}" >/dev/null && { echo "::error::tag ${NEXT_TAG} already exists"; exit 1; }
+          git tag -a "${NEXT_TAG}" -m "Release ${NEXT_TAG}"
+
+          git push origin HEAD:main "refs/tags/${NEXT_TAG}"
+
+      # -----------------------------------------------------------------------
+      # Resolve outputs for the build jobs
+      # -----------------------------------------------------------------------
+      - name: Resolve outputs
+        id: resolve
+        env:
+          TARGET: ${{ inputs.target || 'new-tag' }}
+          INPUT_REF: ${{ inputs.ref }}
+          BUMP: ${{ steps.semver.outputs.bump }}
+          CURRENT: ${{ steps.semver.outputs.current }}
+          NEXT: ${{ steps.semver.outputs.next }}
+          NEXT_STRICT: ${{ steps.semver.outputs.nextStrict }}
+        run: |
+          set -euo pipefail
+          if [ "$TARGET" = "new-tag" ]; then
+            if [ "$BUMP" = "none" ]; then
+              echo "No version bump needed (current: ${CURRENT:-none})."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            {
+              echo "ref=$NEXT"
+              echo "version=$NEXT_STRICT"
+              echo "publish=true"
+              echo "skip=false"
+            } >> "$GITHUB_OUTPUT"
+          elif [ "$TARGET" = "tag" ]; then
+            TAG="${INPUT_REF:-$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)}"
+            [ -n "$TAG" ] || { echo "::error::No release tag found"; exit 1; }
+            { echo "ref=$TAG"; echo "version=${TAG#v}"; echo "publish=true"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+          else
+            SHA="${INPUT_REF:-$(git rev-parse HEAD)}"
+            { echo "ref=$SHA"; echo "version=$SHA"; echo "publish=false"; echo "skip=false"; } >> "$GITHUB_OUTPUT"
+            echo "Running test build against commit $SHA (will not publish release)"
+          fi
+
   build-linux:
     name: Build Linux (${{ matrix.target }})
-    needs: version
-    if: needs.version.outputs.bump != 'none'
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ needs.version.outputs.plain_version }}
+      VERSION: ${{ needs.prepare.outputs.version }}
     strategy:
       matrix:
         include:
@@ -55,6 +154,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -68,35 +169,39 @@ jobs:
 
       - name: Build Binary
         env:
-          CARGO_PKG_VERSION: ${{ needs.version.outputs.plain_version }}
-        run: |
-          cross build --release --target ${{ matrix.target }}
+          TARGET: ${{ matrix.target }}
+          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.version }}
+        run: cross build --release --target "$TARGET"
 
       - name: Package Release Bundle
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          base="${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}"
+          base="${BINARY_NAME}-v${VERSION}-linux-${ARCH}"
           mkdir -p "$base"
-          cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" "$base/"
+          cp "target/${TARGET}/release/${BINARY_NAME}" "$base/"
           cp udev/99-segotep.rules "$base/"
           cp systemd/segotep-digital.service "$base/"
           cp README.md "$base/"
           tar -cJf "${base}.tar.xz" "$base"
           rm -rf "$base"
-          ls -lh "${base}."*
+          ls -lh "${base}.tar.xz"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
           path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.xz
+          if-no-files-found: error
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
-    needs: version
-    if: needs.version.outputs.bump != 'none'
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
     runs-on: windows-latest
     env:
-      VERSION: ${{ needs.version.outputs.plain_version }}
+      VERSION: ${{ needs.prepare.outputs.version }}
     strategy:
       matrix:
         include:
@@ -106,6 +211,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -113,10 +220,11 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Build Binary
+        shell: bash
         env:
-          CARGO_PKG_VERSION: ${{ needs.version.outputs.plain_version }}
-        run: |
-          cargo build --release --target ${{ matrix.target }}
+          TARGET: ${{ matrix.target }}
+          CARGO_PKG_VERSION: ${{ needs.prepare.outputs.version }}
+        run: cargo build --release --target "$TARGET"
 
       - name: Install WiX Toolset
         shell: pwsh
@@ -127,49 +235,59 @@ jobs:
 
       - name: Build Windows Installer (WiX MSI)
         shell: pwsh
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
-          wix build installer\segotep-digital.wxs -arch x64 -d "Version=${{ needs.version.outputs.plain_version }}" -o "installer\output\segotep-digital-v${{ needs.version.outputs.plain_version }}-windows-x64.msi"
+          wix build installer\segotep-digital.wxs -arch x64 -d "Version=$env:VERSION" -o "installer\output\segotep-digital-v$env:VERSION-windows-x64.msi"
 
       - name: Package Release Bundle (ZIP)
         shell: pwsh
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          $base = "${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}"
+          $base = "$env:BINARY_NAME-v$env:VERSION-windows-$env:ARCH"
           New-Item -ItemType Directory -Path $base -Force
-          Copy-Item "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" -Destination "$base/"
+          Copy-Item "target/$env:TARGET/release/$env:BINARY_NAME.exe" -Destination "$base/"
           Copy-Item "installer/output/*.msi" -Destination "$base/"
           Copy-Item "README.md" -Destination "$base/"
           Copy-Item "LICENSE-MIT" -Destination "$base/"
           Copy-Item "LICENSE-APACHE" -Destination "$base/"
-          Compress-Archive -Path "$base/*" -DestinationPath "${base}.zip"
+          Compress-Archive -Path "$base/*" -DestinationPath "$base.zip"
           Remove-Item -Recurse -Force $base
-          Get-ChildItem "${base}.zip"
+          Get-ChildItem "$base.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}
           path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}.zip
+          if-no-files-found: error
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}-installer
           path: installer/output/*.msi
+          if-no-files-found: error
 
   release:
     name: Tag & Release
-    needs: [version, build-linux, build-windows]
-    if: needs.version.outputs.bump != 'none'
+    needs: [prepare, build-linux, build-windows]
+    if: needs.prepare.outputs.skip != 'true' && needs.prepare.outputs.publish == 'true'
     runs-on: ubuntu-slim
+    permissions:
+      contents: write
     env:
-      VERSION: ${{ needs.version.outputs.plain_version }}
+      VERSION: ${{ needs.prepare.outputs.version }}
 
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.ref }}
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -195,8 +313,8 @@ jobs:
       - name: Publish Consolidated Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ needs.version.outputs.version }}
-          name: ${{ needs.version.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.ref }}
+          name: ${{ needs.prepare.outputs.ref }}
           body_path: ${{ steps.notes.outputs.notes }}
           generate_release_notes: true
           draft: false

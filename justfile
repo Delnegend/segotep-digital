@@ -20,3 +20,8 @@ lint:
 # Run all tests
 test:
     cargo test --all-targets --all-features
+
+# Bump Cargo manifest version and update lockfile
+bump version:
+    sed -i -E '0,/^version = ".*"/s//version = "{{version}}"/' Cargo.toml
+    cargo check
