@@ -8,9 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd -g 1000 segotep && \
-    useradd -m -u 1000 -g segotep -s /bin/bash segotep && \
-    echo "segotep ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/segotep && \
-    usermod -aG plugdev,sudo segotep 2>/dev/null || true
+RUN groupadd -g 1000 dev && \
+    useradd -m -u 1000 -g dev -s /bin/bash dev && \
+    echo "dev ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/dev && \
+    usermod -aG plugdev,sudo dev 2>/dev/null || true
 
-USER segotep
+USER dev

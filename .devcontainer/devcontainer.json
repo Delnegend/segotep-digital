@@ -4,7 +4,7 @@
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
-	"remoteUser": "segotep",
+	"remoteUser": "dev",
 	"runArgs": [
 		"--hostname", "segotep-dev",
 		"--privileged",
