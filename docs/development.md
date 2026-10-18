@@ -49,21 +49,20 @@ Run it before merging anything that touches `src/monitor/windows_native.rs`,
 
 ## Releases
 
-Releases are cut by `.github/workflows/release.yml`, which takes a `target`:
+Releases are cut by `.github/workflows/release.yml`, which takes an optional `ref`:
 
-| Target | What it does |
+| Ref | What it does |
 | --- | --- |
-| `new-tag` *(default, and what the weekly cron uses)* | Gates on `just check`, derives the next version, bumps `Cargo.toml` via `just bump`, pushes the commit and tag together, then builds and publishes |
-| `tag` | Rebuilds an existing tag and publishes its release — the repair path |
-| `commit` | Test-builds a commit: artifacts land in the Actions run, nothing is published |
+| *(empty — default, and what the weekly cron uses)* | Gates on `just check`, derives the next version, bumps `Cargo.toml` via `just bump`, pushes the commit and tag together, then builds and publishes |
+| a version tag | Rebuilds an existing tag and publishes its release — the repair path |
+| a commit SHA | Test-builds a commit: artifacts land in the Actions run, nothing is published |
 
 The version is never typed by hand: it comes from the Conventional Commits since
 the last tag (`feat:` → minor, `fix:` → patch, and so on). A week whose commits
 are all `docs:`/`ci:`/`chore:` releases nothing, and the run ends green.
 
 `prepare` pushes the tag **before** the build starts, so a build failure leaves a
-tag with no release. Repair it with `target: tag` — never with `new-tag`, which
-would cut a second tag for the same version.
+tag with no release. Repair it by dispatching with that tag as `ref`.
 
 Each release ships:
 
