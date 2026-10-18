@@ -10,8 +10,6 @@
 
 </div>
 
-> **Maintenance mode.** Bug fixes and dependency updates only — no new features are planned.
-
 ## Quick Start
 
 **Linux** — Homebrew, then the udev rule and the background service:
