@@ -49,13 +49,9 @@ Run it before merging anything that touches `src/monitor/windows_native.rs`,
 
 ## Releases
 
-Releases are cut by `.github/workflows/release.yml`, which takes an optional `ref`:
-
-| Ref | What it does |
-| --- | --- |
-| *(empty — default, and what the weekly cron uses)* | Gates on `just check`, derives the next version, bumps `Cargo.toml` via `just bump`, pushes the commit and tag together, then builds and publishes |
-| a version tag | Rebuilds an existing tag and publishes its release — the repair path |
-| a commit SHA | Test-builds a commit: artifacts land in the Actions run, nothing is published |
+Releases are cut by `.github/workflows/release.yml`, which takes an optional
+`ref`: empty ships, a version tag rebuilds, and a commit SHA test-builds
+without publishing ([dispatch modes](https://github.com/Delnegend/actions/blob/main/README.md)).
 
 The version is never typed by hand: it comes from the Conventional Commits since
 the last tag (`feat:` → minor, `fix:` → patch, and so on). A week whose commits
