@@ -66,7 +66,7 @@ tag with no release. Repair it by dispatching with that tag as `ref`.
 
 Each release ships:
 
-- `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz` — binary, udev rule, systemd unit, README
+- `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz` — binary, udev rule, systemd unit
 - `segotep-digital-v<version>-windows-x64.msi` — installer, registers the service
 - `segotep-digital-<version>-x86_64-pc-windows-msvc.zip` — portable build
 
