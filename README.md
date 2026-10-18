@@ -20,8 +20,9 @@
 brew tap Delnegend/tap && brew install segotep-digital
 
 sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/99-segotep.rules /etc/udev/rules.d/
-sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/segotep-digital.service /etc/systemd/system/
-sudo udevadm control --reload-rules && sudo udevadm trigger && sudo systemctl daemon-reload && sudo systemctl enable --now segotep-digital.service
+sudo udevadm control --reload-rules && sudo udevadm trigger
+
+brew services start segotep-digital
 ```
 
 **Windows** — the MSI on [Releases](https://github.com/Delnegend/segotep-digital/releases) registers and starts the service. For CPU temperature, install the signed PawnIO driver once:
