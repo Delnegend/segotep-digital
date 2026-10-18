@@ -70,7 +70,7 @@ jobs:
 
       - name: Bump, tag, and push
         id: resolve
-        uses: Delnegend/actions/resolve-release@e5a0d7c3af36381065080b6272d91fde28d17414 # v1
+        uses: Delnegend/actions/resolve-release@3914bdd59116118eb4a7bad3cb2c4a04ab380b64 # v1
         with:
           ref: ${{ inputs.ref }}
           dry-run: ${{ inputs.dry-run }}
@@ -119,27 +119,18 @@ jobs:
           CARGO_PKG_VERSION: ${{ needs.prepare.outputs.version }}
         run: cross build --release --target "$TARGET"
 
-      - name: Package Release Bundle
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          base="${BINARY_NAME}-v${VERSION}-linux-${ARCH}"
-          mkdir -p "$base"
-          cp "target/${TARGET}/release/${BINARY_NAME}" "$base/"
-          cp udev/99-segotep.rules "$base/"
-          cp systemd/segotep-digital.service "$base/"
-          cp README.md "$base/"
-          tar -cJf "${base}.tar.xz" "$base"
-          rm -rf "$base"
-          ls -lh "${base}.tar.xz"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      # Names the archive `<name>-<version>-<target>.<ext>` and uploads it
+      # under that same name, so the run, the release and a formula all agree.
+      # Format, effort and layout are the action's decision, not this file's.
+      # The bundle keeps its sidecars: binary, udev rule, systemd unit, README.
+      - name: Package artifact
+        uses: Delnegend/actions/package-artifact@3914bdd59116118eb4a7bad3cb2c4a04ab380b64 # v1
         with:
-          name: ${{ env.BINARY_NAME }}-linux-${{ matrix.arch }}
-          path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-linux-${{ matrix.arch }}.tar.xz
-          if-no-files-found: error
+          name: segotep-digital
+          version: ${{ needs.prepare.outputs.version }}
+          target: ${{ matrix.target }}
+          source: target/${{ matrix.target }}/release/segotep-digital
+          extra: udev/99-segotep.rules systemd/segotep-digital.service README.md
 
   build-windows:
     name: Build Windows (${{ matrix.target }})
@@ -188,29 +179,20 @@ jobs:
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
           wix build installer\segotep-digital.wxs -arch x64 -d "Version=$env:WIX_VERSION" -o "installer\output\segotep-digital-v$env:WIX_VERSION-windows-x64.msi"
 
-      - name: Package Release Bundle (ZIP)
-        shell: pwsh
-        env:
-          TARGET: ${{ matrix.target }}
-          ARCH: ${{ matrix.arch }}
-        run: |
-          $base = "$env:BINARY_NAME-v$env:VERSION-windows-$env:ARCH"
-          New-Item -ItemType Directory -Path $base -Force
-          Copy-Item "target/$env:TARGET/release/$env:BINARY_NAME.exe" -Destination "$base/"
-          Copy-Item "installer/output/*.msi" -Destination "$base/"
-          Copy-Item "README.md" -Destination "$base/"
-          Copy-Item "LICENSE-MIT" -Destination "$base/"
-          Copy-Item "LICENSE-APACHE" -Destination "$base/"
-          Compress-Archive -Path "$base/*" -DestinationPath "$base.zip"
-          Remove-Item -Recurse -Force $base
-          Get-ChildItem "$base.zip"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+      # Names the archive `<name>-<version>-<target>.<ext>` and uploads it
+      # under that same name, so the run, the release and a formula all agree.
+      # Format, effort, layout and the `.exe` suffix are all the action's
+      # decision from `target`, so this file names no per-platform strings.
+      # The bundle keeps its sidecars: binary, installer, README, licenses.
+      # The installer keeps its own upload below and ships standalone too.
+      - name: Package artifact
+        uses: Delnegend/actions/package-artifact@3914bdd59116118eb4a7bad3cb2c4a04ab380b64 # v1
         with:
-          name: ${{ env.BINARY_NAME }}-windows-${{ matrix.arch }}
-          path: ${{ env.BINARY_NAME }}-v${{ env.VERSION }}-windows-${{ matrix.arch }}.zip
-          if-no-files-found: error
+          name: segotep-digital
+          version: ${{ needs.prepare.outputs.version }}
+          target: ${{ matrix.target }}
+          source: target/${{ matrix.target }}/release/segotep-digital
+          extra: installer/output/segotep-digital-v${{ needs.prepare.outputs.version }}-windows-x64.msi README.md LICENSE-MIT LICENSE-APACHE
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -245,14 +227,14 @@ jobs:
         run: |
           cat <<EOF > install-notes.md
           **Linux Installation**
-          1. Extract the tarball: \`tar -xJf segotep-digital-v${VERSION}-linux-amd64.tar.xz\`
+          1. Extract the tarball for your architecture (\`x86_64-unknown-linux-musl\` on x64, \`aarch64-unknown-linux-musl\` on arm64): \`tar -xJf segotep-digital-${VERSION}-<arch>.tar.xz\`
           2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`
           3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`
           4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`
 
           **Windows Installation**
           1. Download the installer \`segotep-digital-v${VERSION}-windows-x64.msi\` and run it (optionally registering the background service).
-          2. Or extract the zip archive \`segotep-digital-v${VERSION}-windows-x64.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task.
+          2. Or extract the zip archive \`segotep-digital-${VERSION}-x86_64-pc-windows-msvc.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task.
           EOF
           echo "notes=$PWD/install-notes.md" >> "$GITHUB_OUTPUT"
 
