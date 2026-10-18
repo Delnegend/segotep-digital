@@ -44,19 +44,12 @@ The service starts immediately and comes back on every boot.
 sudo .\segotep-digital.exe --uninstall-service
 ```
 
-### Run it in the console instead
-
-```powershell
-sudo .\segotep-digital.exe -v -m 3
-```
-
 ## Linux
 
 ### Homebrew
 
 ```bash
-brew tap Delnegend/tap
-brew install segotep-digital
+brew install Delnegend/tap/segotep-digital
 
 # Non-root USB access for the cooler
 sudo cp $(brew --prefix segotep-digital)/share/segotep-digital/99-segotep.rules /etc/udev/rules.d/
@@ -67,8 +60,7 @@ brew services start segotep-digital
 ```
 
 The formula declares the service, so `brew services` generates the unit and
-carries it across upgrades — no `sudo cp` of a shipped unit, and no
-`systemctl enable`. `brew info segotep-digital` prints the same steps.
+carries it across upgrades — no shipped unit, no `systemctl enable`.
 
 Prefer a root-owned system service that starts before login? Copy the shipped
 unit instead:
@@ -91,10 +83,10 @@ cd segotep-digital-<version>-x86_64-unknown-linux-musl
 
 sudo cp segotep-digital /usr/local/bin/ && sudo chmod +x /usr/local/bin/segotep-digital
 
-sudo cp udev/99-segotep.rules /etc/udev/rules.d/
+sudo cp 99-segotep.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 
-sudo cp systemd/segotep-digital.service /etc/systemd/system/
+sudo cp segotep-digital.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now segotep-digital.service
 ```
 
@@ -131,5 +123,5 @@ brew services list                        # Linux, when started via Homebrew
 tail -f /tmp/segotep-digital.log          # Linux, follow the Homebrew service log
 systemctl status segotep-digital          # Linux, when using the shipped unit
 journalctl -u segotep-digital -f          # Linux, follow the shipped unit's log
-segotep-digital -v                        # either platform: watch the telemetry
+segotep-digital -v                        # either platform: watch the telemetry (elevated on Windows)
 ```

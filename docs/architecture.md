@@ -19,8 +19,8 @@ flowchart TB
 
     subgraph TelemetrySubsystem["Hardware Telemetry Engine (SystemTelemetry)"]
         direction TB
-        LINUX_SRC["Linux Direct Kernel Pipeline<br/>• /sys/class/hwmon (k10temp / coretemp)<br/>• /sys/class/powercap/intel-rapl (RAPL energy in Joules/Watts)<br/>• /proc/stat (Accurate CPU Load %)<br/>• /sys/devices/system/cpu (Core clock frequencies)"]
-        WIN_SRC["Windows Native & Kernel Pipeline<br/>• Windows Performance Counters (PDH): CPU Power (Watts) & Boost Clocks (MHz)<br/>• NVIDIA NVML (nvml.dll): GPU Temp, Power, Load %, and Clocks<br/>• PawnIO Kernel Driver: Direct AMD Zen SMN / Intel MSR DTS CPU Temp"]
+        LINUX_SRC["Linux Pipeline<br/>hwmon / RAPL / /proc/stat / cpufreq (see §3)"]
+        WIN_SRC["Windows Pipeline<br/>PDH counters / NVML / PawnIO driver (see §3–§4)"]
     end
 
     subgraph HardwareLayer["Segotep Hardware USB Endpoint"]
@@ -140,20 +140,15 @@ flowchart TD
 
 ---
 
-## 4. Windows Telemetry Architecture: Open & Secure
+## 4. Why CPU Temperature Needs a Kernel Driver on Windows
 
-### 1. Windows Performance Counters (PDH)
-- Queries native Windows kernel performance objects via `pdh.dll`.
-- Accurately captures live CPU package RAPL power consumption (Watts) and boosted clock frequencies across all physical/logical cores without high polling overhead.
-
-### 2. NVIDIA NVML Dynamic Binding
-- Dynamically loads `nvml.dll` at runtime if present on the system.
-- Samples GPU temperature, core frequency, wattage, and utilization directly from the graphics driver.
-
-### 3. Signed PawnIO Driver for Direct CPU Temperature
-- Desktop motherboard UEFI implementations omit ACPI thermal zones, making user-space temperature queries impossible without kernel execution.
-- `segotep-digital` embeds signed PawnIO bytecode modules (`AMDFamily17.bin`, `IntelMSR.bin`).
-- Communicates directly with the kernel device handle `\\?\GLOBALROOT\Device\PawnIO` to query the AMD System Management Unit (SMU) thermal register `0x00059800` (or Intel digital thermal MSRs), providing true hardware die temperature with zero third-party GUI applications required.
+Desktop motherboard UEFI implementations omit ACPI thermal zones, making
+user-space temperature queries impossible without kernel execution.
+`segotep-digital` embeds signed PawnIO bytecode modules (`AMDFamily17.bin`,
+`IntelMSR.bin`) and talks directly to the kernel device handle
+`\\?\GLOBALROOT\Device\PawnIO` to query the AMD System Management Unit (SMU)
+thermal register `0x00059800` (or Intel digital thermal MSRs), providing true
+hardware die temperature with zero third-party GUI applications required.
 
 ---
 
