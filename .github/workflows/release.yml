@@ -164,10 +164,20 @@ jobs:
           # Open Source Maintenance Fee EULA before any command can run.
           dotnet tool install --global wix --version 5.0.2
 
+      # WiX takes only numeric x.y.z versions, which a test-build version is
+      # not. Resolve the installer version here so the WiX build and the
+      # bundle below name the same file in every mode.
+      - name: Resolve installer version
+        id: installer
+        shell: pwsh
+        run: |
+          $version = "${{ needs.prepare.outputs.publish }}" -eq "true" ? "${{ needs.prepare.outputs.version }}" : "0.0.0"
+          "version=$version" >> "$env:GITHUB_OUTPUT"
+
       - name: Build Windows Installer (WiX MSI)
         shell: pwsh
         env:
-          WIX_VERSION: ${{ needs.prepare.outputs.version }}
+          WIX_VERSION: ${{ steps.installer.outputs.version }}
         run: |
           $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
@@ -186,7 +196,7 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           target: ${{ matrix.target }}
           source: target/${{ matrix.target }}/release/segotep-digital
-          extra: installer/output/segotep-digital-v${{ needs.prepare.outputs.version }}-windows-x64.msi README.md LICENSE-MIT LICENSE-APACHE
+          extra: installer/output/segotep-digital-v${{ steps.installer.outputs.version }}-windows-x64.msi README.md LICENSE-MIT LICENSE-APACHE
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
