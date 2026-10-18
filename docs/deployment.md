@@ -28,7 +28,7 @@ is the supported route.
 registers the background service (and removes it on uninstall), and puts
 `segotep-digital.exe` on `PATH`.
 
-**Portable ZIP** — extract `segotep-digital-v<version>-windows-x64.zip`, then
+**Portable ZIP** — extract `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`, then
 from an **elevated** PowerShell:
 
 ```powershell
@@ -86,8 +86,8 @@ service you started the other way before starting this one.
 ### Pre-built tarball
 
 ```bash
-tar -xJf segotep-digital-v<version>-linux-amd64.tar.xz
-cd segotep-digital-v<version>-linux-amd64
+tar -xJf segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz
+cd segotep-digital-<version>-x86_64-unknown-linux-musl
 
 sudo cp segotep-digital /usr/local/bin/ && sudo chmod +x /usr/local/bin/segotep-digital
 

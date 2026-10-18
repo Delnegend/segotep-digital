@@ -67,9 +67,9 @@ would cut a second tag for the same version.
 
 Each release ships:
 
-- `segotep-digital-v<version>-linux-amd64.tar.xz` and `…-linux-arm64.tar.xz` — binary, udev rule, systemd unit, README
+- `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz` — binary, udev rule, systemd unit, README
 - `segotep-digital-v<version>-windows-x64.msi` — installer, registers the service
-- `segotep-digital-v<version>-windows-x64.zip` — portable build
+- `segotep-digital-<version>-x86_64-pc-windows-msvc.zip` — portable build
 
 A weekly run fires every Sunday at 00:00 UTC; the repository is in maintenance
 mode, so bug fixes and dependency updates are the only expected changes.
