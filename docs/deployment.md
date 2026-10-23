@@ -78,6 +78,8 @@ service you started the other way before starting this one.
 ### Pre-built tarball
 
 ```bash
+# Pick your architecture: x86_64-unknown-linux-musl on x64,
+# aarch64-unknown-linux-musl on arm64.
 tar -xJf segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz
 cd segotep-digital-<version>-x86_64-unknown-linux-musl
 

@@ -61,7 +61,7 @@ jobs:
 
       - name: Bump, tag, and push
         id: resolve
-        uses: Delnegend/actions/resolve-release@fd9a429325e7c9103399f01855023e6b394457a2 # v1
+        uses: Delnegend/actions/resolve-release@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
         with:
           ref: ${{ inputs.ref }}
           dry-run: ${{ inputs.dry-run }}
@@ -105,7 +105,7 @@ jobs:
         run: cross build --release --target "$TARGET"
 
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@fd9a429325e7c9103399f01855023e6b394457a2 # v1
+        uses: Delnegend/actions/package-artifact@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
         with:
           name: segotep-digital
           version: ${{ needs.prepare.outputs.version }}
@@ -170,7 +170,7 @@ jobs:
 
       # The installer keeps its own upload below and ships standalone too.
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@fd9a429325e7c9103399f01855023e6b394457a2 # v1
+        uses: Delnegend/actions/package-artifact@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
         with:
           name: segotep-digital
           version: ${{ needs.prepare.outputs.version }}
@@ -192,8 +192,6 @@ jobs:
     runs-on: ubuntu-slim
     permissions:
       contents: write
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
 
     steps:
       - name: Checkout
@@ -201,28 +199,11 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.ref }}
 
-      - name: Generate installation notes
-        id: notes
-        run: |
-          cat <<EOF > install-notes.md
-          **Linux Installation**
-          1. Extract the tarball for your architecture (\`x86_64-unknown-linux-musl\` on x64, \`aarch64-unknown-linux-musl\` on arm64): \`tar -xJf segotep-digital-${VERSION}-<arch>.tar.xz\`
-          2. Copy binary: \`sudo cp segotep-digital /usr/local/bin/\`
-          3. Copy udev rule: \`sudo cp 99-segotep.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules && sudo udevadm trigger\`
-          4. Enable service: \`sudo cp segotep-digital.service /etc/systemd/system/ && sudo systemctl enable --now segotep-digital.service\`
-
-          **Windows Installation**
-          1. Download the installer \`segotep-digital-v${VERSION}-windows-x64.msi\` and run it (optionally registering the background service).
-          2. Or extract the zip archive \`segotep-digital-${VERSION}-x86_64-pc-windows-msvc.zip\` and run \`segotep-digital.exe\` directly or configure it as a Windows Startup Task / Scheduled Task.
-          EOF
-          echo "notes=$PWD/install-notes.md" >> "$GITHUB_OUTPUT"
-
       - name: Publish release
-        uses: Delnegend/actions/publish-release@fd9a429325e7c9103399f01855023e6b394457a2 # v1
+        uses: Delnegend/actions/publish-release@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
         with:
           ref: ${{ needs.prepare.outputs.ref }}
           publish: ${{ needs.prepare.outputs.publish }}
-          body-path: ${{ steps.notes.outputs.notes }}
           files: |
             artifacts/**/*.tar.xz
             artifacts/**/*.zip
