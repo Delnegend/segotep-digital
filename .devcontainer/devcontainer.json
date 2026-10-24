@@ -10,7 +10,6 @@
 		"--privileged",
 		"-v", "/dev:/dev"
 	],
-	"postCreateCommand": "bash .devcontainer/postinstall.sh",
 	"customizations": {
 		"vscode": {
 			"extensions": [
