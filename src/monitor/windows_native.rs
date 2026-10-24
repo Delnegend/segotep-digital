@@ -185,7 +185,6 @@ impl Drop for WindowsPdhMonitor {
     }
 }
 
-
 type NvmlInitFn = unsafe extern "C" fn() -> u32;
 type NvmlShutdownFn = unsafe extern "C" fn() -> u32;
 type NvmlDeviceGetCountFn = unsafe extern "C" fn(*mut u32) -> u32;
