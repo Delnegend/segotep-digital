@@ -63,7 +63,6 @@ impl SegotepDevice {
             return Ok(());
         }
 
-        // Refresh enumerated devices list
         if let Err(e) = self.api.refresh_devices() {
             debug!("Device refresh warning: {e}");
         }

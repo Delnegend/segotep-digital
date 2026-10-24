@@ -185,9 +185,6 @@ impl Drop for WindowsPdhMonitor {
     }
 }
 
-// ---------------------------------------------------------------------------
-// NVIDIA NVML Native User-space GPU Monitoring
-// ---------------------------------------------------------------------------
 
 type NvmlInitFn = unsafe extern "C" fn() -> u32;
 type NvmlShutdownFn = unsafe extern "C" fn() -> u32;
