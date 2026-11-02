@@ -105,7 +105,7 @@ jobs:
         run: cross build --release --target "$TARGET"
 
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
+        uses: Delnegend/actions/package-artifact@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
         with:
           name: segotep-digital
           version: ${{ needs.prepare.outputs.version }}
@@ -170,7 +170,7 @@ jobs:
 
       # The installer keeps its own upload below and ships standalone too.
       - name: Package artifact
-        uses: Delnegend/actions/package-artifact@62064acc9dce2872175e85b3b2e1c2295cd1bee7 # v1
+        uses: Delnegend/actions/package-artifact@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
         with:
           name: segotep-digital
           version: ${{ needs.prepare.outputs.version }}
