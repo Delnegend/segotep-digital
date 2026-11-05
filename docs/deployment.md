@@ -10,7 +10,7 @@ which is the quickest way to watch telemetry while something is wrong.
 
 Windows motherboard firmware does not expose the CPU thermal diode through ACPI,
 so reading AMD Zen (SMN) or Intel (MSR) sensors needs Ring 0. `segotep-digital`
-gets there with [PawnIO](https://pawnio.eu/) — a signed, open-source driver that
+gets there with [PawnIO](https://pawnio.eu/), a signed, open-source driver that
 runs sandboxed bytecode in kernel space and stays compatible with HVCI / Core
 Isolation. Without it, everything except CPU temperature still works.
 
@@ -23,12 +23,12 @@ is the supported route.
 
 ### 2. Install
 
-**Installer (MSI)** — download `segotep-digital-v<version>-windows-x64.msi` from
+**Installer (MSI)**: download `segotep-digital-v<version>-windows-x64.msi` from
 [Releases](https://github.com/Delnegend/segotep-digital/releases) and run it. It
 registers the background service (and removes it on uninstall), and puts
 `segotep-digital.exe` on `PATH`.
 
-**Portable ZIP** — extract `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`, then
+**Portable ZIP**: extract `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`, then
 from an **elevated** PowerShell:
 
 ```powershell
@@ -60,7 +60,7 @@ brew services start segotep-digital
 ```
 
 The formula declares the service, so `brew services` generates the unit and
-carries it across upgrades — no shipped unit, no `systemctl enable`.
+carries it across upgrades; no shipped unit or `systemctl enable` is needed.
 
 Prefer a root-owned system service that starts before login? Copy the shipped
 unit instead:
@@ -115,8 +115,8 @@ sudo systemctl daemon-reload && sudo udevadm control --reload-rules
 
 Both live in the repository and are installed verbatim:
 
-- [`systemd/segotep-digital.service`](../systemd/segotep-digital.service) — `Restart=always`, `RestartSec=3`, logs to the journal. Used when you copy it to `/etc/systemd/system/`; the Homebrew formula declares an equivalent service, so `brew services` does not need this file.
-- [`udev/99-segotep.rules`](../udev/99-segotep.rules) — `MODE="0666"` plus the `uaccess` tag for `1a86:a001`, which is what lets a logged-in user talk to the cooler without root.
+- [`systemd/segotep-digital.service`](../systemd/segotep-digital.service): `Restart=always`, `RestartSec=3`, logs to the journal. Used when you copy it to `/etc/systemd/system/`; the Homebrew formula declares an equivalent service, so `brew services` does not need this file.
+- [`udev/99-segotep.rules`](../udev/99-segotep.rules): `MODE="0666"` plus the `uaccess` tag for `1a86:a001`, which is what lets a logged-in user talk to the cooler without root.
 
 ## Checking it is alive
 

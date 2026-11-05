@@ -1,6 +1,6 @@
 # Configuration Reference
 
-`segotep-digital` is configured entirely from the command line — there is no
+`segotep-digital` is configured entirely from the command line; there is no
 config file and no environment variable.
 
 ## Options
@@ -8,16 +8,16 @@ config file and no environment variable.
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-i, --interval-ms <MS>` | `1000` | Telemetry refresh interval in milliseconds. Anything below `100` is raised to `100` |
-| `-m, --model-id <ID>` | `3` | Device model ID — see below |
+| `-m, --model-id <ID>` | `3` | Device model ID (see below) |
 | `-f, --fahrenheit` | off | Show temperature in Fahrenheit instead of Celsius |
 | `--screen-off` | off | Turn the 7-segment display off and exit |
 | `--vid <HEX>` | `1a86` | Override the USB Vendor ID |
 | `--pid <HEX>` | `a001` | Override the USB Product ID |
 | `-v, --verbose` | off | Print the telemetry of every tick to stdout |
-| `--install-service` | — | Windows only: install and start the background service |
-| `--uninstall-service` | — | Windows only: stop and remove the background service |
-| `-h, --help` | — | Print help |
-| `-V, --version` | — | Print the version |
+| `--install-service` | N/A | Windows only: install and start the background service |
+| `--uninstall-service` | N/A | Windows only: stop and remove the background service |
+| `-h, --help` | N/A | Print help |
+| `-V, --version` | N/A | Print the version |
 
 ## Model IDs
 
@@ -32,8 +32,8 @@ the connection but shows nothing is usually the other ID.
 ## USB identity
 
 The defaults match the cooler's bridge chip (WCH `0x1a86:0xa001`). A device that
-enumerates differently — a different revision, or a second unit on the same
-machine — can be addressed with `--vid` / `--pid`. Both take hexadecimal.
+enumerates differently (a different revision, or a second unit on the same
+machine) can be addressed with `--vid` / `--pid`. Both take hexadecimal.
 
 ## Examples
 

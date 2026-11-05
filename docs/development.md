@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Rust 1.85 or newer** — the crate is edition 2024.
+- **Rust 1.85 or newer**: the crate is edition 2024.
 - **Linux build dependencies:**
 
   ```bash
@@ -14,7 +14,7 @@
   sudo pacman -S --needed pkgconf libusb systemd
   ```
 
-- **Optional:** a devcontainer is included — *Reopen in Container* installs the
+- **Optional:** a devcontainer is included; *Reopen in Container* installs the
   toolchain and the libraries above.
 
 ## Build and check
@@ -62,16 +62,16 @@ tag with no release. Repair it by dispatching with that tag as `ref`.
 
 Each release ships:
 
-- `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz` — binary, udev rule, systemd unit
-- `segotep-digital-v<version>-windows-x64.msi` — installer, registers the service
-- `segotep-digital-<version>-x86_64-pc-windows-msvc.zip` — portable build
+- `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz`: binary, udev rule, systemd unit
+- `segotep-digital-v<version>-windows-x64.msi`: installer, registers the service
+- `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`: portable build
 
 A weekly run fires every Sunday at 00:00 UTC; the repository is in maintenance
 mode, so bug fixes and dependency updates are the only expected changes.
 
 ## CI
 
-`.github/workflows/ci.yml` runs one gate — `Check (just check)` — plus four
+`.github/workflows/ci.yml` runs one gate, `Check (just check)`, plus four
 scans in parallel: Gitleaks (secrets, full history), Semgrep (SAST), Trivy
 (vulnerabilities and Dockerfile misconfigurations) and OSV-Scanner
 (dependencies). Only the gate is required to merge; the scans report findings
