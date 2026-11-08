@@ -5,10 +5,9 @@
            Manufacturer="Delnegend"
            Version="$(var.Version)"
            UpgradeCode="{312623A3-840C-48A2-BBF1-BBF28B2B98E4}"
-           ProductCode="{ED136298-EAEB-40BA-9776-419FF44CDBFB}"
            Language="1033">
     <SummaryInformation Description="Cross-platform driver and background service for Segotep Ice Moon / Digital series AIO CPU coolers." />
-    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
     <StandardDirectory Id="ProgramFiles64Folder">

@@ -64,7 +64,6 @@ Each release ships:
 
 - `segotep-digital-<version>-x86_64-unknown-linux-musl.tar.xz` and `…-aarch64-unknown-linux-musl.tar.xz`: binary, udev rule, systemd unit
 - `segotep-digital-v<version>-windows-x64.msi`: installer, registers the service
-- `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`: portable build
 
 A weekly run fires every Sunday at 00:00 UTC; the repository is in maintenance
 mode, so bug fixes and dependency updates are the only expected changes.

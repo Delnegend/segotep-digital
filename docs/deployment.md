@@ -28,16 +28,6 @@ is the supported route.
 registers the background service (and removes it on uninstall), and puts
 `segotep-digital.exe` on `PATH`.
 
-**Portable ZIP**: extract `segotep-digital-<version>-x86_64-pc-windows-msvc.zip`, then
-from an **elevated** PowerShell:
-
-```powershell
-# On Windows 11 this prompt can use `sudo`; otherwise run PowerShell as Administrator.
-sudo .\segotep-digital.exe --install-service -m 3 -i 1000
-```
-
-The service starts immediately and comes back on every boot.
-
 ### 3. Uninstall
 
 ```powershell

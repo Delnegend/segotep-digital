@@ -168,16 +168,6 @@ jobs:
           New-Item -ItemType Directory -Force -Path "installer\output" | Out-Null
           wix build installer\segotep-digital.wxs -arch x64 -d "Version=$env:WIX_VERSION" -o "installer\output\segotep-digital-v$env:WIX_VERSION-windows-x64.msi"
 
-      # The installer keeps its own upload below and ships standalone too.
-      - name: Package artifact
-        uses: Delnegend/actions/package-artifact@cc01ad7470776ce23b38f14823a86d560e2d592e # v1
-        with:
-          name: segotep-digital
-          version: ${{ needs.prepare.outputs.version }}
-          target: ${{ matrix.target }}
-          source: target/${{ matrix.target }}/release/segotep-digital
-          extra: installer/output/segotep-digital-v${{ steps.installer.outputs.version }}-windows-x64.msi
-
       - name: Upload installer artifact
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
