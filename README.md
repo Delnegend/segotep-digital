@@ -10,6 +10,8 @@
 
 </div>
 
+---
+
 ## Quick Start
 
 **Linux**: Homebrew, then the udev rule and the background service:
@@ -34,17 +36,16 @@ Either way the pump block shows CPU temperature within a second.
 ## Highlights
 
 - **Replaces the vendor utility**: a native background service under 10 MB of RAM and around 0% CPU, with no GUI and no tray icon.
-- **Real telemetry, not estimates**: Linux reads kernel `sysfs`, Intel/AMD RAPL energy counters, `cpufreq` and `/proc/stat`; Windows reads PDH performance counters and NVIDIA NVML for the GPU.
+- **Real telemetry, not estimates**: Linux reads kernel sysfs, Intel/AMD RAPL energy counters, cpufreq and /proc/stat; Windows reads PDH performance counters and NVIDIA NVML for the GPU.
 - **No kernel driver of its own**: Windows CPU temperature comes through the signed PawnIO driver, so HVCI and Core Integrity stay switched on.
 - **Survives the hardware**: the cooler can sleep, unplug or power-cycle, and the service reconnects instead of crashing.
 - **Configurable**: refresh interval, model ID, °C or °F, screen off, and custom USB IDs.
 
 ## Documentation
 
-- **[Configuration](docs/configuration.md)**: every flag, its default, and the model IDs.
-- **[Architecture](docs/architecture.md)**: telemetry pipelines, the 34-byte HID protocol, and the polling loop.
-- **[Deployment](docs/deployment.md)**: installing, uninstalling, udev rules and the PawnIO driver.
-- **[Development](docs/development.md)**: building, testing, and how releases are cut.
+- **[Architecture](docs/architecture.md)**: Telemetry pipelines, the 34-byte HID protocol, and the polling loop.
+- **[Development](docs/development.md)**: Building, testing, and how releases are cut.
+- **[Deployment](docs/deployment.md)**: Installing, uninstalling, udev rules and the PawnIO driver.
 
 ## License
 
