@@ -45,7 +45,7 @@ Either way the pump block shows CPU temperature within a second.
 
 - **[Architecture](docs/architecture.md)**: Telemetry pipelines, the 34-byte HID protocol, and the polling loop.
 - **[Development](docs/development.md)**: Building, testing, and how releases are cut.
-- **[Deployment](docs/deployment.md)**: Installing, uninstalling, udev rules and the PawnIO driver.
+- **[Deployment](docs/deployment.md)**: Installing, uninstalling, udev rules and the PawnIO driver; see [configuration](docs/configuration.md) for command-line options.
 
 ## License
 

@@ -39,7 +39,7 @@ highlights:
 documentation:
   architecture: "Telemetry pipelines, the 34-byte HID protocol, and the polling loop."
   development: "Building, testing, and how releases are cut."
-  deployment: "Installing, uninstalling, udev rules and the PawnIO driver."
+  deployment: "Installing, uninstalling, udev rules and the PawnIO driver; see [configuration](docs/configuration.md) for command-line options."
 
 license:
   type:
