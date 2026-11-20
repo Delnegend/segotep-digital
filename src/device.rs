@@ -111,7 +111,6 @@ impl SegotepDevice {
     ///
     /// # Errors
     /// Returns an error if the device is not connected.
-    #[allow(clippy::indexing_slicing)]
     pub fn read_info(&mut self, timeout_ms: i32) -> Result<Option<DeviceInfo>, String> {
         self.device.as_ref().map_or_else(
             || Err("Device not connected".into()),
@@ -119,9 +118,20 @@ impl SegotepDevice {
                 let mut buf = [0u8; 64];
                 match dev.read_timeout(&mut buf, timeout_ms) {
                     Ok(len) if len >= 10 => {
-                        let model_id = buf[5];
-                        let capability_mask = buf[8];
-                        let is_fahrenheit_capable = buf[9] == 1;
+                        let [
+                            _,
+                            _,
+                            _,
+                            _,
+                            _,
+                            model_id,
+                            _,
+                            _,
+                            capability_mask,
+                            fahrenheit,
+                            ..,
+                        ] = buf;
+                        let is_fahrenheit_capable = fahrenheit == 1;
 
                         Ok(Some(DeviceInfo {
                             model_id,

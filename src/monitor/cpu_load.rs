@@ -120,7 +120,6 @@ impl CpuLoadMonitor {
 
 /// Reads line 1 of `/proc/stat`: "cpu user nice system idle iowait irq softirq steal guest `guest_nice`"
 #[cfg(target_os = "linux")]
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 fn read_proc_stat_cpu() -> Option<(u64, u64)> {
     let content = fs::read_to_string("/proc/stat").ok()?;
     let first_line = content.lines().next()?;
@@ -128,28 +127,27 @@ fn read_proc_stat_cpu() -> Option<(u64, u64)> {
         return None;
     }
 
-    let values: Vec<u64> = first_line
-        .split_whitespace()
-        .skip(1)
-        .filter_map(|s| s.parse::<u64>().ok())
-        .collect();
-
-    if values.len() < 4 {
-        return None;
-    }
-
-    // idle_time = idle (idx 3) + iowait (idx 4 if exists)
-    let idle = values[3] + values.get(4).unwrap_or(&0);
-    let total: u64 = values.iter().sum();
+    let mut values = first_line.split_whitespace().skip(1).map(str::parse::<u64>);
+    let user = values.next()?.ok()?;
+    let nice = values.next()?.ok()?;
+    let system = values.next()?.ok()?;
+    let idle = values.next()?.ok()?;
+    let iowait = values.next().transpose().ok()?.unwrap_or(0);
+    let idle = idle.saturating_add(iowait);
+    let total = values.try_fold(
+        user.saturating_add(nice)
+            .saturating_add(system)
+            .saturating_add(idle),
+        |sum, value| Some(sum.saturating_add(value.ok()?)),
+    )?;
     let work = total.saturating_sub(idle);
 
     Some((total, work))
 }
 
 #[cfg(target_os = "windows")]
-#[allow(clippy::as_conversions)]
-const fn filetime_to_u64(ft: FILETIME) -> u64 {
-    ((ft.dwHighDateTime as u64) << 32) | (ft.dwLowDateTime as u64)
+fn filetime_to_u64(ft: FILETIME) -> u64 {
+    (u64::from(ft.dwHighDateTime) << 32) | u64::from(ft.dwLowDateTime)
 }
 
 #[cfg(target_os = "windows")]

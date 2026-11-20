@@ -68,7 +68,6 @@ fn parse_hex_id(id_str: &str, default: u16) -> u16 {
     u16::from_str_radix(clean, 16).unwrap_or(default)
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn main() {
     let args = Args::parse();
 
@@ -128,6 +127,10 @@ fn main() {
         return;
     }
 
+    run_driver(&args, vid, pid);
+}
+
+fn run_driver(args: &Args, vid: u16, pid: u16) {
     info!("Starting Segotep Digital Driver");
     info!("Target Device: VID=0x{vid:04x}, PID=0x{pid:04x}");
     info!("Model ID: {}", args.model_id);

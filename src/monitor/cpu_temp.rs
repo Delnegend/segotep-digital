@@ -87,7 +87,6 @@ impl CpuTempMonitor {
 
 /// Searches `/sys/class/hwmon/` for known CPU temperature sensor nodes.
 #[cfg(target_os = "linux")]
-#[allow(clippy::indexing_slicing)]
 fn find_hwmon_cpu_temp() -> Option<PathBuf> {
     let hwmon_dir = Path::new("/sys/class/hwmon");
     if !hwmon_dir.exists() {

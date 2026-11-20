@@ -23,11 +23,6 @@ impl CpuFreqMonitor {
     }
 
     /// Fetches the primary/average CPU clock speed in MHz.
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::as_conversions,
-        clippy::arithmetic_side_effects
-    )]
     pub fn get_freq_mhz(&mut self) -> u16 {
         #[cfg(target_os = "linux")]
         {
@@ -36,17 +31,19 @@ impl CpuFreqMonitor {
                 fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
                 && let Ok(khz) = content.trim().parse::<u32>()
             {
-                return (khz / 1000).clamp(0, 65535) as u16;
+                return u16::try_from(khz / 1000).unwrap_or(u16::MAX);
             }
         }
 
         // Cross-platform fallback via sysinfo (works on Windows & Linux)
         self.sys.refresh_cpu_frequency();
         let cpus = self.sys.cpus();
-        if !cpus.is_empty() {
-            let avg_mhz: u64 =
-                cpus.iter().map(sysinfo::Cpu::frequency).sum::<u64>() / (cpus.len() as u64);
-            return avg_mhz.clamp(0, 65535) as u16;
+        let total = cpus
+            .iter()
+            .fold(0_u64, |sum, cpu| sum.saturating_add(cpu.frequency()));
+        let count = u64::try_from(cpus.len()).unwrap_or(u64::MAX);
+        if let Some(avg_mhz) = total.checked_div(count) {
+            return u16::try_from(avg_mhz).unwrap_or(u16::MAX);
         }
 
         0

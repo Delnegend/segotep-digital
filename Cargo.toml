@@ -32,19 +32,23 @@ windows-sys = { version = "0.61", features = [
 [profile.release]
 opt-level = 3
 codegen-units = 1
-lto = "fat"
+lto = "thin"
 strip = true
 panic = "abort"
 
 [lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
-panic = "deny"
-todo = "deny"
-unimplemented = "deny"
+indexing_slicing = "deny"
+arithmetic_side_effects = "deny"
 unreachable = "deny"
-cast_possible_truncation = "warn"
-cast_possible_wrap = "warn"
-cast_sign_loss = "warn"
-cast_precision_loss = "warn"
-indexing_slicing = "warn"
+unimplemented = "deny"
+unchecked_time_subtraction = "deny"
+todo = "deny"
+string_slice = "deny"
+panic_in_result_fn = "deny"
+panic = "deny"
+exit = "deny"
+as_conversions = "deny"

@@ -76,10 +76,12 @@ impl CpuPowerMonitor {
 
             if let Some(current_energy_uj) = read_u64_from_file(path) {
                 let delta_uj = if current_energy_uj >= self.last_energy_uj {
-                    current_energy_uj - self.last_energy_uj
+                    current_energy_uj.saturating_sub(self.last_energy_uj)
                 } else if let Some(max_range) = self.max_energy_range_uj {
                     // Counter wrapped around
-                    (max_range - self.last_energy_uj) + current_energy_uj
+                    max_range
+                        .saturating_sub(self.last_energy_uj)
+                        .saturating_add(current_energy_uj)
                 } else {
                     0
                 };
