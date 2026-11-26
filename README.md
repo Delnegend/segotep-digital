@@ -4,9 +4,9 @@
 
 **Drives the 7-segment display on Segotep Ice Moon and Digital AIO CPU coolers from Linux and Windows: a small Rust service that replaces the vendor's closed-source utility.**
 
-[![CI](https://img.shields.io/github/actions/workflow/status/Delnegend/segotep-digital/ci.yml?branch=main&style=flat-square)](https://github.com/Delnegend/segotep-digital/actions)
-[![Release](https://img.shields.io/github/v/release/Delnegend/segotep-digital?style=flat-square)](https://github.com/Delnegend/segotep-digital/releases)
-[![License](https://img.shields.io/badge/license-MIT%20%7C%20Apache--2.0-blue?style=flat-square)](LICENSE-MIT)
+[![CI](https://badgers.space/github/checks/Delnegend/segotep-digital/main?corner_radius=0&label=build)](https://github.com/Delnegend/segotep-digital/actions)
+[![Release](https://badgers.space/github/release/Delnegend/segotep-digital?corner_radius=0&color=ea7233)](https://github.com/Delnegend/segotep-digital/releases)
+[![License](https://badgers.space/badge/license/MIT%20%7C%20Apache-2.0/007ec6?corner_radius=0)](LICENSE-MIT)
 
 </div>
 
